@@ -1,0 +1,679 @@
+<!-- PARTE 1/4 - ESTRUTURA + FIREBASE + LOGIN -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Esplanada Viva - Estudos Bíblicos</title>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAvv9_G2-qSrwADgoQanPdkpBRLDr-d4ps",
+  authDomain: "estudosbiblicosesplanadaviva.firebaseapp.com",
+  projectId: "estudosbiblicosesplanadaviva",
+  storageBucket: "estudosbiblicosesplanadaviva.firebasestorage.app",
+  messagingSenderId: "831476101977",
+  appId: "1:831476101977:web:ee99fa8934878c15fc9248"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let currentUser = null;
+let userProfile = null;
+
+onAuthStateChanged(auth, async (user) => {
+  if(user){
+    currentUser = user;
+    await loadUserProfile();
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    loadApp();
+  } else {
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('appScreen').style.display = 'none';
+  }
+});
+
+async function loadUserProfile(){
+  const ref = doc(db, "usuarios", currentUser.uid);
+  const snap = await getDoc(ref);
+  userProfile = snap.data();
+}
+
+window.login = async () => {
+  const email = document.getElementById('email').value;
+  const senha = document.getElementById('senha').value;
+  try{
+    await signInWithEmailAndPassword(auth, email, senha);
+  }catch(e){
+    alert('Erro no login');
+  }
+}
+
+window.register = async () => {
+  const email = document.getElementById('email').value;
+  const senha = document.getElementById('senha').value;
+  const nome = document.getElementById('nomeCadastro').value;
+
+  const cred = await createUserWithEmailAndPassword(auth, email, senha);
+
+  await setDoc(doc(db, "usuarios", cred.user.uid), {
+    nome,
+    email,
+    perfil: "instrutor"
+  });
+}
+
+window.logout = () => signOut(auth);
+
+</script>
+
+<style>
+body{margin:0;font-family:Inter;background:#f5f7fb}
+.login{
+  display:flex;align-items:center;justify-content:center;height:100vh;
+  background:linear-gradient(135deg,#145a37,#1d7a4b);
+}
+.login-box{
+  background:#fff;padding:40px;border-radius:20px;width:320px;text-align:center;
+}
+.login-box input{
+  width:100%;padding:12px;margin:8px 0;border-radius:10px;border:1px solid #ccc;
+}
+.login-box button{
+  width:100%;padding:12px;margin-top:10px;border:none;border-radius:10px;
+  background:#177245;color:#fff;font-weight:bold;cursor:pointer;
+}
+.header{
+  background:#145a37;color:#fff;padding:16px;display:flex;justify-content:space-between;
+}
+</style>
+</head>
+
+<body>
+
+<div id="loginScreen" class="login">
+  <div class="login-box">
+    <h2>Esplanada Viva</h2>
+    <input id="nomeCadastro" placeholder="Nome (cadastro)">
+    <input id="email" placeholder="Email">
+    <input id="senha" type="password" placeholder="Senha">
+    <button onclick="login()">Entrar</button>
+    <button onclick="register()">Cadastrar</button>
+  </div>
+</div>
+
+<div id="appScreen" style="display:none;">
+
+<div class="header">
+  <span id="userInfo"></span>
+  <button onclick="logout()">Sair</button>
+</div>
+
+<!-- CONTINUA -->
+<!-- PARTE 2/4 - FIRESTORE + PERFIS + DASHBOARD -->
+
+<script type="module">
+
+// ===== REFERÊNCIAS GLOBAIS =====
+const interessadosRef = collection(db, "interessados");
+const seriesRef = collection(db, "series");
+
+let interessados = [];
+let series = [];
+
+// ===== CARREGAR APP =====
+async function loadApp(){
+  document.getElementById("userInfo").innerText = `${userProfile.nome} (${userProfile.perfil})`;
+
+  await loadSeries();
+  await loadInteressados();
+
+  renderDashboard();
+}
+
+// ===== CARREGAR SÉRIES =====
+async function loadSeries(){
+  const snap = await getDocs(seriesRef);
+  series = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  // se não tiver nenhuma série, cria padrão
+  if(series.length === 0 && userProfile.perfil === "admin"){
+    await seedSeries();
+    await loadSeries();
+  }
+}
+
+// ===== CRIAR SÉRIES PADRÃO =====
+async function seedSeries(){
+  const defaults = [
+    { nome: "Ouvindo a Voz de Deus", totalEstudos: 26 },
+    { nome: "Ensinos de Jesus", totalEstudos: 20 },
+    { nome: "Bíblia Fácil Daniel", totalEstudos: 16 },
+    { nome: "Bíblia Fácil Guia Rápido", totalEstudos: 10 },
+    { nome: "Bíblia Fácil (completo)", totalEstudos: 32 }
+  ];
+
+  for(const s of defaults){
+    await addDoc(seriesRef, s);
+  }
+}
+
+// ===== CARREGAR INTERESSADOS =====
+async function loadInteressados(){
+  if(userProfile.perfil === "admin"){
+    const snap = await getDocs(interessadosRef);
+    interessados = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } else {
+    const q = query(interessadosRef, where("instrutorId", "==", currentUser.uid));
+    const snap = await getDocs(q);
+    interessados = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  }
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const total = interessados.length;
+  const ativos = interessados.filter(i => i.status === "Ativo").length;
+  const concluidos = interessados.filter(i => i.status === "Concluído").length;
+  const decisao = interessados.filter(i =>
+    i.status === "Pronto para apelo" || i.status === "Pronto para batismo"
+  ).length;
+
+  document.getElementById("dashboard").innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+      
+      <div class="card">
+        <h3>${total}</h3>
+        <p>Total</p>
+      </div>
+
+      <div class="card">
+        <h3>${ativos}</h3>
+        <p>Ativos</p>
+      </div>
+
+      <div class="card">
+        <h3>${concluidos}</h3>
+        <p>Concluídos</p>
+      </div>
+
+      <div class="card">
+        <h3>${decisao}</h3>
+        <p>Decisão</p>
+      </div>
+
+    </div>
+
+    <div style="margin-top:20px;">
+      <h3>Últimos interessados</h3>
+      ${renderLista()}
+    </div>
+  `;
+}
+
+// ===== LISTA =====
+function renderLista(){
+  if(interessados.length === 0){
+    return "<p>Nenhum interessado ainda</p>";
+  }
+
+  return interessados.slice(0,5).map(i => {
+    return `
+      <div style="background:#fff;padding:12px;border-radius:10px;margin-bottom:10px;">
+        <strong>${i.nome}</strong><br>
+        <small>${i.serieNome} • ${i.estudoAtual}/${i.totalEstudos}</small>
+      </div>
+    `;
+  }).join("");
+}
+
+// ===== CRIAR INTERESSADO =====
+window.criarInteressado = async () => {
+  const nome = prompt("Nome:");
+  if(!nome) return;
+
+  const serie = series[0];
+
+  await addDoc(interessadosRef, {
+    nome,
+    instrutorId: currentUser.uid,
+    instrutorNome: userProfile.nome,
+    serieId: serie.id,
+    serieNome: serie.nome,
+    estudoAtual: 0,
+    totalEstudos: serie.totalEstudos,
+    status: "Ativo",
+    interesse: "Médio",
+    criadoEm: new Date().toISOString()
+  });
+
+  await loadInteressados();
+  renderDashboard();
+};
+
+</script>
+
+
+<!-- UI SIMPLES DO DASHBOARD -->
+
+<div style="padding:20px;">
+  <button onclick="criarInteressado()">+ Novo interessado</button>
+</div>
+
+<div id="dashboard" style="padding:20px;"></div>
+
+<!-- CONTINUA -->
+
+<!-- PARTE 3/4 - CRUD COMPLETO + FORMULÁRIO -->
+
+<style>
+.form-box{
+  background:#fff;
+  padding:20px;
+  border-radius:16px;
+  margin:20px;
+}
+.form-box input, .form-box select{
+  width:100%;
+  padding:10px;
+  margin:6px 0;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
+.form-box button{
+  margin-top:10px;
+}
+</style>
+
+<div class="form-box">
+  <h3>Novo / Editar Interessado</h3>
+
+  <input id="f_nome" placeholder="Nome">
+  <input id="f_telefone" placeholder="Telefone">
+  <input id="f_endereco" placeholder="Endereço">
+  <input id="f_igreja" placeholder="Igreja">
+  <input id="f_distrito" placeholder="Distrito">
+
+  <select id="f_serie"></select>
+
+  <input id="f_estudo" type="number" placeholder="Estudo atual">
+
+  <select id="f_status"></select>
+  <select id="f_interesse"></select>
+
+  <textarea id="f_obs" placeholder="Observações"></textarea>
+
+  <button onclick="salvarInteressado()">Salvar</button>
+</div>
+
+<div id="listaCompleta" style="padding:20px;"></div>
+
+<script type="module">
+
+let editId = null;
+
+// ===== POPULAR SELECTS =====
+function renderFormOptions(){
+  document.getElementById("f_serie").innerHTML =
+    series.map(s => `<option value="${s.id}">${s.nome}</option>`).join("");
+
+  const statusList = ["Ativo","Pausado","Desinteressado","Concluído","Pronto para apelo","Pronto para batismo"];
+  document.getElementById("f_status").innerHTML =
+    statusList.map(s => `<option>${s}</option>`).join("");
+
+  const interestList = ["Alto","Médio","Baixo"];
+  document.getElementById("f_interesse").innerHTML =
+    interestList.map(s => `<option>${s}</option>`).join("");
+}
+
+// ===== SALVAR =====
+window.salvarInteressado = async () => {
+
+  const nome = document.getElementById("f_nome").value;
+  if(!nome) return alert("Nome obrigatório");
+
+  const serieId = document.getElementById("f_serie").value;
+  const serie = series.find(s => s.id === serieId);
+
+  const estudoAtual = Number(document.getElementById("f_estudo").value || 0);
+  const porcentagem = Math.round((estudoAtual / serie.totalEstudos) * 100);
+
+  const data = {
+    nome,
+    telefone: document.getElementById("f_telefone").value,
+    endereco: document.getElementById("f_endereco").value,
+    igreja: document.getElementById("f_igreja").value,
+    distrito: document.getElementById("f_distrito").value,
+
+    serieId,
+    serieNome: serie.nome,
+    totalEstudos: serie.totalEstudos,
+    estudoAtual,
+    porcentagem,
+
+    status: document.getElementById("f_status").value,
+    interesse: document.getElementById("f_interesse").value,
+    observacoes: document.getElementById("f_obs").value,
+
+    instrutorId: currentUser.uid,
+    instrutorNome: userProfile.nome,
+
+    atualizadoEm: new Date().toISOString()
+  };
+
+  if(editId){
+    await setDoc(doc(db, "interessados", editId), data);
+    editId = null;
+  }else{
+    await addDoc(interessadosRef, {
+      ...data,
+      criadoEm: new Date().toISOString()
+    });
+  }
+
+  limparForm();
+  await loadInteressados();
+  renderListaCompleta();
+};
+
+// ===== EDITAR =====
+window.editar = (id) => {
+  const item = interessados.find(i => i.id === id);
+  if(!item) return;
+
+  if(userProfile.perfil !== "admin" && item.instrutorId !== currentUser.uid){
+    return alert("Você não pode editar esse registro");
+  }
+
+  editId = id;
+
+  document.getElementById("f_nome").value = item.nome;
+  document.getElementById("f_telefone").value = item.telefone || "";
+  document.getElementById("f_endereco").value = item.endereco || "";
+  document.getElementById("f_igreja").value = item.igreja || "";
+  document.getElementById("f_distrito").value = item.distrito || "";
+  document.getElementById("f_serie").value = item.serieId;
+  document.getElementById("f_estudo").value = item.estudoAtual;
+  document.getElementById("f_status").value = item.status;
+  document.getElementById("f_interesse").value = item.interesse;
+  document.getElementById("f_obs").value = item.observacoes || "";
+};
+
+// ===== EXCLUIR =====
+window.excluir = async (id) => {
+  const item = interessados.find(i => i.id === id);
+
+  if(userProfile.perfil !== "admin" && item.instrutorId !== currentUser.uid){
+    return alert("Sem permissão");
+  }
+
+  if(!confirm("Excluir?")) return;
+
+  await deleteDoc(doc(db, "interessados", id));
+
+  await loadInteressados();
+  renderListaCompleta();
+};
+
+// ===== LISTA COMPLETA =====
+function renderListaCompleta(){
+  const el = document.getElementById("listaCompleta");
+
+  el.innerHTML = interessados.map(i => `
+    <div style="background:#fff;margin-bottom:10px;padding:12px;border-radius:10px;">
+      <strong>${i.nome}</strong><br>
+      ${i.serieNome} • ${i.estudoAtual}/${i.totalEstudos}<br>
+      <small>${i.status} • ${i.interesse}</small><br>
+      <button onclick="editar('${i.id}')">Editar</button>
+      <button onclick="excluir('${i.id}')">Excluir</button>
+    </div>
+  `).join("");
+}
+
+// ===== LIMPAR =====
+function limparForm(){
+  document.querySelectorAll(".form-box input, .form-box textarea").forEach(i => i.value = "");
+}
+
+// ===== INIT =====
+setTimeout(() => {
+  renderFormOptions();
+  renderListaCompleta();
+}, 1000);
+
+</script>
+
+<!-- CONTINUA -->
+
+<!-- PARTE 4/4 - ADMIN + UX + REFINO FINAL -->
+
+<style>
+.admin-box{
+  background:#fff;
+  margin:20px;
+  padding:20px;
+  border-radius:16px;
+  border:1px solid #eee;
+}
+
+.hidden{display:none}
+
+.toast{
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  background:#177245;
+  color:#fff;
+  padding:12px 18px;
+  border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.2);
+  opacity:0;
+  transform:translateY(20px);
+  transition:.3s;
+}
+.toast.show{
+  opacity:1;
+  transform:translateY(0);
+}
+
+.loading{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.3);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:999;
+}
+.spinner{
+  width:40px;height:40px;
+  border:4px solid #fff;
+  border-top:4px solid #177245;
+  border-radius:50%;
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{
+  to{transform:rotate(360deg)}
+}
+</style>
+
+<!-- ADMIN - SÉRIES -->
+<div id="adminPanel" class="admin-box hidden">
+  <h3>Gerenciar Séries (Admin)</h3>
+
+  <input id="novaSerieNome" placeholder="Nome da série">
+  <input id="novaSerieTotal" type="number" placeholder="Total de estudos">
+
+  <button onclick="addSerie()">Adicionar</button>
+
+  <div id="listaSeries"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="loading" id="loading"><div class="spinner"></div></div>
+
+<script type="module">
+
+// ===== TOAST =====
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.innerText = msg;
+  t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),2500);
+}
+
+// ===== LOADING =====
+function setLoading(on){
+  document.getElementById("loading").style.display = on ? "flex" : "none";
+}
+
+// ===== ADMIN CHECK =====
+function applyPermissions(){
+  if(userProfile.perfil === "admin"){
+    document.getElementById("adminPanel").classList.remove("hidden");
+  }
+}
+
+// ===== ADICIONAR SÉRIE =====
+window.addSerie = async () => {
+
+  if(userProfile.perfil !== "admin"){
+    return alert("Sem permissão");
+  }
+
+  const nome = document.getElementById("novaSerieNome").value.trim();
+  const total = Number(document.getElementById("novaSerieTotal").value);
+
+  if(!nome || !total){
+    return alert("Preencha corretamente");
+  }
+
+  setLoading(true);
+
+  await addDoc(seriesRef, {
+    nome,
+    totalEstudos: total
+  });
+
+  setLoading(false);
+
+  showToast("Série adicionada");
+
+  document.getElementById("novaSerieNome").value = "";
+  document.getElementById("novaSerieTotal").value = "";
+
+  await loadSeries();
+  renderSeriesAdmin();
+};
+
+// ===== EXCLUIR SÉRIE =====
+window.deleteSerieAdmin = async (id) => {
+
+  if(userProfile.perfil !== "admin"){
+    return alert("Sem permissão");
+  }
+
+  if(!confirm("Excluir série?")) return;
+
+  setLoading(true);
+
+  await deleteDoc(doc(db, "series", id));
+
+  setLoading(false);
+
+  showToast("Série removida");
+
+  await loadSeries();
+  renderSeriesAdmin();
+};
+
+// ===== RENDER ADMIN =====
+function renderSeriesAdmin(){
+  const el = document.getElementById("listaSeries");
+
+  el.innerHTML = series.map(s => `
+    <div style="margin-top:10px;padding:10px;border:1px solid #eee;border-radius:10px;">
+      <strong>${s.nome}</strong> (${s.totalEstudos})
+      <button onclick="deleteSerieAdmin('${s.id}')">Excluir</button>
+    </div>
+  `).join("");
+}
+
+// ===== MELHORIA DASHBOARD =====
+function renderDashboard(){
+  const total = interessados.length;
+  const ativos = interessados.filter(i => i.status === "Ativo").length;
+  const concluidos = interessados.filter(i => i.status === "Concluído").length;
+  const decisao = interessados.filter(i =>
+    i.status === "Pronto para apelo" || i.status === "Pronto para batismo"
+  ).length;
+
+  document.getElementById("dashboard").innerHTML = `
+    <div style="
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:16px;
+    ">
+
+      ${card("Total", total)}
+      ${card("Ativos", ativos)}
+      ${card("Concluídos", concluidos)}
+      ${card("Decisão", decisao)}
+
+    </div>
+
+    <div style="margin-top:25px;">
+      <h3>Resumo</h3>
+      ${renderLista()}
+    </div>
+  `;
+}
+
+function card(label,value){
+  return `
+    <div style="
+      background:#fff;
+      padding:18px;
+      border-radius:16px;
+      box-shadow:0 10px 20px rgba(0,0,0,.05);
+    ">
+      <h2>${value}</h2>
+      <p>${label}</p>
+    </div>
+  `;
+}
+
+// ===== OVERRIDE LOAD APP =====
+const originalLoadApp = loadApp;
+
+loadApp = async function(){
+  setLoading(true);
+
+  await originalLoadApp();
+
+  applyPermissions();
+  renderSeriesAdmin();
+
+  setLoading(false);
+}
+
+// ===== UX EXTRA =====
+document.addEventListener("keydown", (e)=>{
+  if(e.key === "Enter"){
+    if(document.activeElement.tagName === "INPUT"){
+      salvarInteressado();
+    }
+  }
+});
+
+</script>
+
+</body>
+</html>
