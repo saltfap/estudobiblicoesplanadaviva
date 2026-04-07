@@ -107,6 +107,24 @@ a{
   min-height:100vh;
 }
 
+.auth-brand-top{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  margin-bottom:10px;
+}
+
+.auth-logo{
+  width:64px;
+  height:64px;
+  object-fit:contain;
+  border-radius:16px;
+  background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.14);
+  padding:8px;
+  box-shadow:0 10px 24px rgba(0,0,0,.10);
+}
+
 .auth-screen{
   display:flex;
   align-items:center;
