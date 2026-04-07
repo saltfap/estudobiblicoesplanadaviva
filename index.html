@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<link rel="icon" href="./assets/logo.png" />
+  <link rel="icon" href="./assets/logo.png" />
   <meta charset="UTF-8" />
   <meta
     name="viewport"
@@ -27,12 +27,12 @@
     <section id="authScreen" class="screen auth-screen">
       <div class="auth-shell">
         <div class="auth-brand-panel">
-  <div class="auth-brand-top">
-    <img src="./assets/logotwo.png" class="auth-logo" alt="Logo Esplanada Viva" />
-    <div class="brand-badge">Esplanada Viva</div>
-  </div>
+          <div class="auth-brand-top">
+            <img src="./assets/logotwo.png" class="auth-logo" alt="Logo Esplanada Viva" />
+            <div class="brand-badge">Esplanada Viva</div>
+          </div>
 
-  <h1 class="auth-title">Estudos Bíblicos</h1>
+          <h1 class="auth-title">Estudos Bíblicos</h1>
           <p class="auth-subtitle">
             Painel estratégico para acompanhar interessados, progresso e decisões espirituais.
           </p>
@@ -104,14 +104,19 @@
       <div class="app-layout">
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-top">
-            <div class="brand-block">
-  <img src="./assets/logotwo.png" class="brand-logo" alt="Logo Esplanada Viva" />
+            <div class="sidebar-header-mobile">
+              <div class="brand-block">
+                <img src="./assets/logotwo.png" class="brand-logo" alt="Logo Esplanada Viva" />
+                <div>
+                  <p class="brand-overline">Estudos Bíblicos</p>
+                  <h2>Esplanada Viva</h2>
+                </div>
+              </div>
 
-  <div>
-    <p class="brand-overline">Estudos Bíblicos</p>
-    <h2>Esplanada Viva</h2>
-  </div>
-</div>
+              <button id="logoutBtnMobile" class="btn btn-ghost sidebar-mobile-logout" type="button">
+                Sair
+              </button>
+            </div>
 
             <div class="user-panel">
               <div class="user-avatar" id="userAvatar">EV</div>
@@ -146,7 +151,7 @@
 
         <main class="main-content">
           <header class="topbar">
-            <div>
+            <div class="topbar-main">
               <p class="page-kicker">Painel de acompanhamento</p>
               <h1 id="pageTitle">Dashboard</h1>
               <p class="page-description">
