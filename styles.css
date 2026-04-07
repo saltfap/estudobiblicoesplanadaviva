@@ -2,29 +2,30 @@
    RESET
 ========================================================= */
 :root{
-  --bg:#f3f6fb;
-  --bg-soft:#f8fafc;
+  --bg:#f4f7f5;
+  --bg-soft:#f8fbf9;
   --surface:#ffffff;
-  --surface-2:#fcfdff;
-  --line:#e3e8f1;
-  --line-strong:#d3dceb;
-  --text:#142033;
-  --text-soft:#5f6f86;
-  --text-faint:#8a98ad;
+  --surface-2:#fcfdfc;
+  --line:#d9e4df;
+  --line-strong:#c8d7d1;
 
-  --primary:#166534;
-  --primary-2:#15803d;
-  --primary-3:#22c55e;
-  --primary-soft:#e9f8ef;
+  --text:#1f2328;
+  --text-soft:#5f6b66;
+  --text-faint:#7f8b86;
 
-  --blue:#2563eb;
-  --blue-soft:#edf4ff;
+  --primary:#1b9b7f;
+  --primary-2:#15856d;
+  --primary-3:#25b393;
+  --primary-soft:#e9f7f3;
 
-  --yellow:#b7791f;
-  --yellow-soft:#fff7e8;
+  --blue:#1b9b7f;
+  --blue-soft:#edf8f5;
 
-  --red:#c0392b;
-  --red-soft:#fff1ef;
+  --yellow:#f59a23;
+  --yellow-soft:#fff5e8;
+
+  --red:#e52427;
+  --red-soft:#fff0f0;
 
   --shadow-xs:0 1px 2px rgba(16,24,40,.05);
   --shadow-sm:0 8px 24px rgba(15,23,42,.06);
@@ -147,7 +148,7 @@ a{
   border-radius:var(--radius-xl);
   padding:38px;
   background:
-    linear-gradient(140deg, rgba(8,47,73,.88), rgba(17,94,89,.86) 38%, rgba(22,101,52,.92) 100%);
+    linear-gradient(140deg, #16695c 0%, #1b9b7f 52%, #15856d 100%);
   color:#fff;
   box-shadow:var(--shadow-lg);
 }
@@ -301,7 +302,7 @@ a{
   flex-direction:column;
   justify-content:space-between;
   background:
-    linear-gradient(180deg, #0d4d2d 0%, #135735 42%, #166534 100%);
+    linear-gradient(180deg, #146b5c 0%, #1b9b7f 55%, #15856d 100%);
   border-right:1px solid rgba(255,255,255,.06);
   box-shadow:inset -1px 0 0 rgba(255,255,255,.04);
   color:#fff;
@@ -828,12 +829,12 @@ a{
 
 .btn-primary{
   color:#fff;
-  background:linear-gradient(180deg, var(--primary-2), var(--primary));
-  box-shadow:0 12px 30px rgba(21,128,61,.22);
+  background:linear-gradient(180deg, var(--primary), var(--primary-2));
+  box-shadow:0 12px 30px rgba(27,155,127,.22);
 }
 
 .btn-primary:hover{
-  background:linear-gradient(180deg, #1b8c46, #146534);
+  background:linear-gradient(180deg, #22a98b, #15856d);
 }
 
 .btn-secondary{
