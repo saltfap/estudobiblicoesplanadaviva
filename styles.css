@@ -2,6 +2,7 @@
    RESET
 ========================================================= */
 :root{
+  --primary-3:#25b393;
   --bg:#f4f7f5;
   --bg-soft:#f8fbf9;
   --surface:#ffffff;
@@ -1427,6 +1428,75 @@ a{
     letter-spacing:.08em;
     margin-bottom:6px;
   }
+
+   /* =========================================================
+   DASHBOARD SCALES
+========================================================= */
+.dashboard-scales{
+  margin-bottom:22px;
+}
+
+.scale-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:16px;
+}
+
+.scale-card{
+  padding:18px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:linear-gradient(180deg, #fff, #fbfdff);
+}
+
+.scale-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+
+.scale-top strong{
+  font-size:15px;
+  line-height:1.4;
+}
+
+.scale-top span{
+  font-size:22px;
+  font-weight:800;
+  color:var(--primary);
+  letter-spacing:-.03em;
+}
+
+.scale-bar{
+  width:100%;
+  height:12px;
+  border-radius:999px;
+  overflow:hidden;
+  background:#edf2f8;
+}
+
+.scale-bar > span{
+  display:block;
+  height:100%;
+  border-radius:999px;
+  background:linear-gradient(90deg, var(--primary), var(--primary-3));
+  box-shadow:0 4px 12px rgba(34,197,94,.24);
+}
+
+.scale-caption{
+  margin:10px 0 0;
+  font-size:13px;
+  color:var(--text-soft);
+  font-weight:600;
+}
+
+@media (max-width: 720px){
+  .scale-grid{
+    grid-template-columns:1fr;
+  }
+}
 
   .field select[multiple]{
     min-height:120px;
