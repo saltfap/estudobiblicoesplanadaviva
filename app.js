@@ -28,6 +28,9 @@ import { app, db } from "./firebase-config.js";
 
 const DISTRITO_FIXO = "Esplanada";
 
+/* =========================
+   ESTADO
+========================= */
 const state = {
   user: null,
   interessados: [],
@@ -257,7 +260,9 @@ function sortByUpdatedDesc(arr) {
 }
 
 function sortByName(arr) {
-  return [...arr].sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt-BR"));
+  return [...arr].sort((a, b) =>
+    (a.nome || "").localeCompare(b.nome || "", "pt-BR")
+  );
 }
 
 function getSerieById(id) {
@@ -273,11 +278,11 @@ function getUserById(id) {
 }
 
 function getCurrentUserLocalId() {
-  return state.user?.igrejaId || state.user?.localId || "";
+  return state.user?.igrejaId || "";
 }
 
 function getCurrentUserLocalName() {
-  return state.user?.igrejaNome || state.user?.localNome || state.user?.igreja || "";
+  return state.user?.igrejaNome || "";
 }
 
 function getSectionTitle(sectionId) {
@@ -329,18 +334,6 @@ function applyRoleUI() {
     el.style.display = isAdmin() ? "" : "none";
   });
 
-  document.querySelectorAll(".admin-or-distrital").forEach((el) => {
-    el.style.display = isAdmin() || isDistrital() ? "" : "none";
-  });
-
-  document.querySelectorAll(".local-only").forEach((el) => {
-    el.style.display = isLocal() ? "" : "none";
-  });
-
-  document.querySelectorAll(".membro-only").forEach((el) => {
-    el.style.display = isMembro() ? "" : "none";
-  });
-
   if (!getAllowedSections().includes(state.activeSection)) {
     state.activeSection = "dashboardSection";
   }
@@ -352,6 +345,21 @@ function buildEmailAuth(username, igrejaId) {
   const safeUsername = normalizeText(username).replace(/[^a-z0-9._-]/g, "");
   const safeChurch = String(igrejaId || "").replace(/[^a-zA-Z0-9]/g, "");
   return `${safeUsername}__${safeChurch}@app.esplanadaviva.local`;
+}
+
+function mapUserCreationError(error) {
+  const code = error?.code || "";
+
+  switch (code) {
+    case "auth/email-already-in-use":
+      return "Esse acesso já existe.";
+    case "auth/invalid-email":
+      return "E-mail inválido.";
+    case "auth/weak-password":
+      return "A senha precisa ter pelo menos 6 caracteres.";
+    default:
+      return error?.message || "Não foi possível criar o usuário.";
+  }
 }
 
 /* =========================
@@ -452,6 +460,7 @@ async function refreshData() {
       loadUsuarios(),
       loadInteressados()
     ]);
+
     renderAll();
   } catch (error) {
     console.error("Erro ao carregar dados:", error);
@@ -481,7 +490,7 @@ function getFilteredInteressados() {
       return (
         normalizeText(item.nome).includes(search) ||
         normalizeText(item.telefone).includes(search) ||
-        normalizeText(item.igrejaNome || item.igreja).includes(search) ||
+        normalizeText(item.igrejaNome || "").includes(search) ||
         normalizeText(item.responsavelNome || "").includes(search) ||
         normalizeText(item.criadoPorNome || "").includes(search) ||
         normalizeText(item.serieNome || "").includes(search)
@@ -505,7 +514,7 @@ function getFilteredInteressados() {
 }
 
 /* =========================
-   RENDER FORM BASICO
+   RENDERS BÁSICOS
 ========================= */
 function renderStatusAndInterestOptions() {
   status.innerHTML = statusOptions
@@ -994,7 +1003,7 @@ function renderLocaisList() {
 }
 
 /* =========================
-   FORM USUARIOS
+   FORM USUÁRIOS
 ========================= */
 function renderUserProfileOptions() {
   if (!novoUsuarioPerfil) return;
@@ -1267,7 +1276,7 @@ async function deleteInteressado(id) {
 }
 
 /* =========================
-   CRUD SERIES
+   CRUD SÉRIES
 ========================= */
 async function handleSerieSubmit(event) {
   event.preventDefault();
@@ -1528,8 +1537,6 @@ async function editLocal(id) {
         .map((u) =>
           updateDoc(doc(db, "usuarios", u.id), {
             igrejaNome: nomeFinal,
-            localNome: nomeFinal,
-            igreja: nomeFinal,
             distrito: DISTRITO_FIXO,
             atualizadoEm: new Date().toISOString(),
             updatedAt: serverTimestamp()
@@ -1545,6 +1552,15 @@ async function editLocal(id) {
             atualizadoEm: new Date().toISOString(),
             updatedAt: serverTimestamp()
           })
+        ),
+      ...state.usuarios
+        .filter((u) => u.igrejaId === id && (u.perfil === "local" || u.perfil === "membro"))
+        .map((u) =>
+          updateDoc(doc(db, "login_index", u.id), {
+            igrejaNome: nomeFinal,
+            atualizadoEm: new Date().toISOString(),
+            updatedAt: serverTimestamp()
+          }).catch(() => {})
         )
     ]);
 
@@ -1593,7 +1609,7 @@ async function deleteLocal(id) {
 }
 
 /* =========================
-   CRUD USUARIOS
+   CRUD USUÁRIOS
 ========================= */
 function validateUserCreationByRole(profile) {
   const allowed = getAllowedProfilesToCreate();
@@ -1601,6 +1617,18 @@ function validateUserCreationByRole(profile) {
   if (!allowed.includes(profile)) {
     throw new Error("Você não pode criar esse tipo de usuário.");
   }
+}
+
+async function ensureUniqueUsernameInChurch(username, igrejaId) {
+  const q = query(
+    collection(db, "login_index"),
+    where("username", "==", username),
+    where("igrejaId", "==", igrejaId),
+    limit(1)
+  );
+
+  const snap = await getDocs(q);
+  return snap.empty;
 }
 
 async function createGlobalUserWithSecondaryApp({ nome, email, senha, perfil }) {
@@ -1691,6 +1719,19 @@ async function createLocalOrMembroUserWithSecondaryApp({
       updatedAt: serverTimestamp()
     });
 
+    await setDoc(doc(db, "login_index", uid), {
+      username,
+      igrejaId,
+      igrejaNome,
+      perfil,
+      emailAuth,
+      ativo: true,
+      criadoEm: new Date().toISOString(),
+      atualizadoEm: new Date().toISOString(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
     await signOut(secondaryAuth);
     await deleteApp(secondaryApp);
 
@@ -1706,18 +1747,6 @@ async function createLocalOrMembroUserWithSecondaryApp({
   }
 }
 
-async function ensureUniqueUsernameInChurch(username, igrejaId) {
-  const q = query(
-    collection(db, "usuarios"),
-    where("username", "==", username),
-    where("igrejaId", "==", igrejaId),
-    limit(1)
-  );
-
-  const snap = await getDocs(q);
-  return snap.empty;
-}
-
 async function handleUserFormSubmit(event) {
   event.preventDefault();
   clearMessage();
@@ -1730,13 +1759,13 @@ async function handleUserFormSubmit(event) {
   const nomeValue = novoUsuarioNome.value.trim();
   const perfilValue = novoUsuarioPerfil.value;
 
+  if (!nomeValue) {
+    showMessage("Informe o nome do usuário.", "error");
+    return;
+  }
+
   try {
     validateUserCreationByRole(perfilValue);
-
-    if (!nomeValue) {
-      throw new Error("Informe o nome do usuário.");
-    }
-
     showLoading();
 
     if (perfilValue === "admin" || perfilValue === "distrital") {
@@ -1806,7 +1835,7 @@ async function handleUserFormSubmit(event) {
     await refreshData();
   } catch (error) {
     console.error("Erro ao criar usuário:", error);
-    showMessage(error.message || "Não foi possível criar o usuário.", "error");
+    showMessage(mapUserCreationError(error), "error");
   } finally {
     hideLoading();
   }
