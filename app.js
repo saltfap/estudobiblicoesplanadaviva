@@ -420,27 +420,56 @@ async function loadUsuarios() {
 }
 
 async function loadInteressados() {
-  const snap = await getDocs(collection(db, "interessados"));
-  let data = snap.docs.map((item) => ({
-    id: item.id,
-    ...item.data()
-  }));
+  let snap;
 
-  if (isAdmin() || isDistrital()) {
-    state.interessados = data;
+  if (isAdmin()) {
+    snap = await getDocs(collection(db, "interessados"));
+    state.interessados = snap.docs.map((item) => ({
+      id: item.id,
+      ...item.data()
+    }));
+    return;
+  }
+
+  if (isDistrital()) {
+    const q = query(
+      collection(db, "interessados"),
+      where("distrito", "==", DISTRITO_FIXO)
+    );
+
+    snap = await getDocs(q);
+    state.interessados = snap.docs.map((item) => ({
+      id: item.id,
+      ...item.data()
+    }));
     return;
   }
 
   if (isLocal()) {
-    const localId = getCurrentUserLocalId();
-    data = data.filter((item) => item.igrejaId === localId);
-    state.interessados = data;
+    const q = query(
+      collection(db, "interessados"),
+      where("igrejaId", "==", getCurrentUserLocalId())
+    );
+
+    snap = await getDocs(q);
+    state.interessados = snap.docs.map((item) => ({
+      id: item.id,
+      ...item.data()
+    }));
     return;
   }
 
   if (isMembro()) {
-    data = data.filter((item) => item.criadoPorId === state.user.uid);
-    state.interessados = data;
+    const q = query(
+      collection(db, "interessados"),
+      where("criadoPorId", "==", state.user.uid)
+    );
+
+    snap = await getDocs(q);
+    state.interessados = snap.docs.map((item) => ({
+      id: item.id,
+      ...item.data()
+    }));
     return;
   }
 
