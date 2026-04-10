@@ -8,14 +8,28 @@ import {
 
 import {
   doc,
-  getDoc
+  getDoc,
+  getDocs,
+  collection,
+  query,
+  where,
+  limit
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 import { auth, db } from "./firebase-config.js";
 
 const loginForm = document.getElementById("loginForm");
+
+const loginAccessType = document.getElementById("loginAccessType");
+const loginLocal = document.getElementById("loginLocal");
+const loginUsername = document.getElementById("loginUsername");
 const loginEmail = document.getElementById("loginEmail");
 const loginPassword = document.getElementById("loginPassword");
+
+const loginLocalGroup = document.getElementById("loginLocalGroup");
+const loginUsernameGroup = document.getElementById("loginUsernameGroup");
+const loginEmailGroup = document.getElementById("loginEmailGroup");
+
 const authMessage = document.getElementById("authMessage");
 const globalMessage = document.getElementById("globalMessage");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -36,6 +50,9 @@ const authStore = {
 
 window.authStore = authStore;
 
+/* =========================
+   HELPERS
+========================= */
 function showLoading() {
   loadingOverlay?.classList.remove("hidden");
 }
@@ -58,6 +75,14 @@ function hideMessage(target) {
   target.classList.remove("success", "error", "info");
 }
 
+function normalizeText(text = "") {
+  return String(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function getInitials(name = "") {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "EV";
@@ -66,33 +91,26 @@ function getInitials(name = "") {
 }
 
 function formatRole(role = "") {
-  if (role === "admin") return "Administrador";
-  if (role === "instrutor") return "Instrutor";
-  return "Sem perfil";
+  switch (role) {
+    case "admin":
+      return "Administrador";
+    case "distrital":
+      return "Líder Distrital";
+    case "local":
+      return "Líder Local";
+    case "membro":
+      return "Membro";
+    default:
+      return "Sem perfil";
+  }
 }
 
-function applyUserUI(profile) {
-  if (!profile) return;
-
-  if (loggedUserName) loggedUserName.textContent = profile.nome || "Usuário";
-  if (loggedUserRole) loggedUserRole.textContent = formatRole(profile.perfil);
-  if (userAvatar) userAvatar.textContent = getInitials(profile.nome || "EV");
-
-  const isAdmin = profile.perfil === "admin";
-
-  document.querySelectorAll(".admin-only").forEach((el) => {
-    el.style.display = isAdmin ? "" : "none";
-  });
+function isGlobalAccessType(type) {
+  return type === "admin" || type === "distrital";
 }
 
-function showAuthScreen() {
-  authScreen?.classList.remove("hidden");
-  appScreen?.classList.add("hidden");
-}
-
-function showAppScreen() {
-  authScreen?.classList.add("hidden");
-  appScreen?.classList.remove("hidden");
+function isLocalAccessType(type) {
+  return type === "local" || type === "membro";
 }
 
 function clearAuthStore() {
@@ -119,6 +137,101 @@ function dispatchAuthReady() {
   );
 }
 
+function showAuthScreen() {
+  authScreen?.classList.remove("hidden");
+  appScreen?.classList.add("hidden");
+}
+
+function showAppScreen() {
+  authScreen?.classList.add("hidden");
+  appScreen?.classList.remove("hidden");
+}
+
+function applyUserUI(profile) {
+  if (!profile) return;
+
+  if (loggedUserName) loggedUserName.textContent = profile.nome || "Usuário";
+  if (loggedUserRole) loggedUserRole.textContent = formatRole(profile.perfil);
+  if (userAvatar) userAvatar.textContent = getInitials(profile.nome || "EV");
+}
+
+function updateLoginModeUI() {
+  const accessType = loginAccessType?.value || "admin";
+  const globalMode = isGlobalAccessType(accessType);
+  const localMode = isLocalAccessType(accessType);
+
+  if (loginEmailGroup) loginEmailGroup.style.display = globalMode ? "" : "none";
+  if (loginLocalGroup) loginLocalGroup.style.display = localMode ? "" : "none";
+  if (loginUsernameGroup) loginUsernameGroup.style.display = localMode ? "" : "none";
+
+  if (loginEmail) {
+    loginEmail.required = globalMode;
+    if (!globalMode) loginEmail.value = "";
+  }
+
+  if (loginLocal) {
+    loginLocal.required = localMode;
+    if (!localMode) loginLocal.value = "";
+  }
+
+  if (loginUsername) {
+    loginUsername.required = localMode;
+    if (!localMode) loginUsername.value = "";
+  }
+
+  if (loginPassword) {
+    loginPassword.required = true;
+  }
+}
+
+function mapFirebaseAuthError(error) {
+  const code = error?.code || "";
+
+  switch (code) {
+    case "auth/invalid-email":
+      return "E-mail inválido.";
+    case "auth/missing-password":
+      return "Digite sua senha.";
+    case "auth/invalid-credential":
+      return "Credenciais inválidas.";
+    case "auth/user-disabled":
+      return "Este usuário foi desativado.";
+    case "auth/too-many-requests":
+      return "Muitas tentativas. Tente novamente mais tarde.";
+    case "auth/network-request-failed":
+      return "Falha de conexão. Verifique sua internet.";
+    default:
+      return error?.message || "Não foi possível entrar.";
+  }
+}
+
+/* =========================
+   DATA LOAD
+========================= */
+async function loadLoginLocais() {
+  if (!loginLocal) return;
+
+  try {
+    const snap = await getDocs(collection(db, "locais"));
+    const locais = snap.docs
+      .map((item) => ({ id: item.id, ...item.data() }))
+      .filter((item) => item.ativo !== false)
+      .sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt-BR"));
+
+    loginLocal.innerHTML =
+      `<option value="">Selecionar igreja</option>` +
+      locais.map((item) => {
+        const label = `${item.nome}${item.tipo ? ` (${item.tipo})` : ""}`;
+        return `<option value="${item.id}">${label}</option>`;
+      }).join("");
+  } catch (error) {
+    console.error("Erro ao carregar locais no login:", error);
+  }
+}
+
+/* =========================
+   PERFIL
+========================= */
 async function fetchUserProfile(uid) {
   const ref = doc(db, "usuarios", uid);
   const snap = await getDoc(ref);
@@ -135,66 +248,182 @@ async function fetchUserProfile(uid) {
 
   return {
     uid,
+    id: snap.id,
     ...data
   };
 }
 
-function mapFirebaseAuthError(error) {
-  const code = error?.code || "";
+async function fetchUserByUsernameAndChurch({ perfil, username, igrejaId }) {
+  const q = query(
+    collection(db, "usuarios"),
+    where("perfil", "==", perfil),
+    where("username", "==", username),
+    where("igrejaId", "==", igrejaId),
+    where("ativo", "==", true),
+    limit(1)
+  );
 
-  switch (code) {
-    case "auth/invalid-email":
-      return "E-mail inválido.";
-    case "auth/missing-password":
-      return "Digite sua senha.";
-    case "auth/invalid-credential":
-      return "E-mail ou senha incorretos.";
-    case "auth/user-disabled":
-      return "Este usuário foi desativado.";
-    case "auth/too-many-requests":
-      return "Muitas tentativas. Tente novamente mais tarde.";
-    case "auth/network-request-failed":
-      return "Falha de conexão. Verifique sua internet.";
-    default:
-      return error?.message || "Não foi possível entrar.";
+  const snap = await getDocs(q);
+
+  if (snap.empty) {
+    throw new Error("Usuário não encontrado para essa igreja.");
   }
+
+  const userDoc = snap.docs[0];
+  const data = userDoc.data();
+
+  if (!data.emailAuth) {
+    throw new Error("Esse usuário não possui credencial de acesso configurada.");
+  }
+
+  return {
+    uid: userDoc.id,
+    id: userDoc.id,
+    ...data
+  };
+}
+
+/* =========================
+   LOGIN
+========================= */
+async function handleGlobalLogin({ accessType, email, password }) {
+  if (!email || !password) {
+    throw new Error("Preencha e-mail e senha.");
+  }
+
+  await setPersistence(auth, browserLocalPersistence);
+
+  const credential = await signInWithEmailAndPassword(auth, email, password);
+  const profile = await fetchUserProfile(credential.user.uid);
+
+  if (profile.perfil !== accessType) {
+    await signOut(auth).catch(() => {});
+    throw new Error("Esse acesso não corresponde ao perfil selecionado.");
+  }
+
+  setAuthStore(credential.user, profile);
+  applyUserUI(profile);
+  showAppScreen();
+  dispatchAuthReady();
+}
+
+async function handleLocalLogin({ accessType, igrejaId, username, password }) {
+  if (!igrejaId) {
+    throw new Error("Selecione a igreja.");
+  }
+
+  if (!username) {
+    throw new Error("Digite o usuário.");
+  }
+
+  if (!password) {
+    throw new Error("Digite a senha.");
+  }
+
+  await setPersistence(auth, browserLocalPersistence);
+
+  const profileByQuery = await fetchUserByUsernameAndChurch({
+    perfil: accessType,
+    username: normalizeText(username),
+    igrejaId
+  });
+
+  const credential = await signInWithEmailAndPassword(
+    auth,
+    profileByQuery.emailAuth,
+    password
+  );
+
+  const profile = await fetchUserProfile(credential.user.uid);
+
+  if (profile.perfil !== accessType) {
+    await signOut(auth).catch(() => {});
+    throw new Error("Esse acesso não corresponde ao perfil selecionado.");
+  }
+
+  if (profile.igrejaId !== igrejaId) {
+    await signOut(auth).catch(() => {});
+    throw new Error("Esse usuário não pertence à igreja selecionada.");
+  }
+
+  setAuthStore(credential.user, profile);
+  applyUserUI(profile);
+  showAppScreen();
+  dispatchAuthReady();
 }
 
 async function handleLogin(event) {
   event.preventDefault();
   hideMessage(authMessage);
 
-  const email = loginEmail?.value.trim() || "";
-  const password = loginPassword?.value || "";
-
-  if (!email || !password) {
-    showMessage(authMessage, "Preencha e-mail e senha.", "error");
-    return;
-  }
+  const accessType = loginAccessType?.value || "admin";
 
   try {
     showLoading();
-    await setPersistence(auth, browserLocalPersistence);
-    await signInWithEmailAndPassword(auth, email, password);
+
+    if (isGlobalAccessType(accessType)) {
+      await handleGlobalLogin({
+        accessType,
+        email: loginEmail?.value.trim() || "",
+        password: loginPassword?.value || ""
+      });
+    } else {
+      await handleLocalLogin({
+        accessType,
+        igrejaId: loginLocal?.value || "",
+        username: loginUsername?.value || "",
+        password: loginPassword?.value || ""
+      });
+    }
+
+    showMessage(
+      globalMessage,
+      `Bem-vindo, ${authStore.profile?.nome || "usuário"}.`,
+      "success"
+    );
   } catch (error) {
     console.error("Erro no login:", error);
+    clearAuthStore();
     showAuthScreen();
-    showMessage(authMessage, mapFirebaseAuthError(error), "error");
+
+    const message = isGlobalAccessType(accessType)
+      ? mapFirebaseAuthError(error)
+      : (error?.message || "Não foi possível entrar.");
+
+    showMessage(authMessage, message, "error");
+    dispatchAuthReady();
+  } finally {
     hideLoading();
   }
 }
 
+/* =========================
+   LOGOUT
+========================= */
 async function handleLogout() {
   try {
     showLoading();
+
     await signOut(auth);
+
+    clearAuthStore();
+    loginForm?.reset();
+    updateLoginModeUI();
+
+    showAuthScreen();
+    hideMessage(globalMessage);
+    dispatchAuthReady();
   } catch (error) {
     console.error("Erro ao sair:", error);
     showMessage(globalMessage, "Não foi possível encerrar a sessão.", "error");
+  } finally {
     hideLoading();
   }
 }
 
+/* =========================
+   BOOTSTRAP
+========================= */
 function bootstrapAuth() {
   showLoading();
 
@@ -204,8 +433,6 @@ function bootstrapAuth() {
 
       if (!user) {
         clearAuthStore();
-        if (loginForm) loginForm.reset();
-        hideMessage(globalMessage);
         showAuthScreen();
         dispatchAuthReady();
         return;
@@ -216,13 +443,14 @@ function bootstrapAuth() {
       setAuthStore(user, profile);
       applyUserUI(profile);
       showAppScreen();
-      showMessage(globalMessage, `Bem-vindo, ${profile.nome || "usuário"}.`, "success");
       dispatchAuthReady();
     } catch (error) {
       console.error("Erro ao validar sessão:", error);
 
       clearAuthStore();
+
       await signOut(auth).catch(() => {});
+
       showAuthScreen();
       showMessage(
         authMessage,
@@ -236,6 +464,13 @@ function bootstrapAuth() {
   });
 }
 
+/* =========================
+   EVENTOS
+========================= */
+if (loginAccessType) {
+  loginAccessType.addEventListener("change", updateLoginModeUI);
+}
+
 if (loginForm) {
   loginForm.addEventListener("submit", handleLogin);
 }
@@ -244,10 +479,14 @@ if (logoutBtn) {
   logoutBtn.addEventListener("click", handleLogout);
 }
 
+/* =========================
+   START
+========================= */
+await loadLoginLocais();
+updateLoginModeUI();
 bootstrapAuth();
 
 export {
   authStore,
-  handleLogout,
-  fetchUserProfile
+  handleLogout
 };
