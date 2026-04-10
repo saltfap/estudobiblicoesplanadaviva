@@ -251,6 +251,108 @@ function isDecision(item) {
   return item.status === "Pronto para apelo" || item.status === "Pronto para batismo";
 }
 
+/* =========================
+   NOVO: ESCALAS DO DASHBOARD
+========================= */
+function getSpiritualReadinessValue(statusText = "") {
+  const map = {
+    "Desinteressado": 10,
+    "Pausado": 30,
+    "Ativo": 55,
+    "Concluído": 75,
+    "Pronto para apelo": 90,
+    "Pronto para batismo": 100
+  };
+
+  return map[statusText] ?? 0;
+}
+
+function getAverageProgressValue(data = []) {
+  if (!data.length) return 0;
+
+  const total = data.reduce((sum, item) => {
+    return sum + Number(item.porcentagem || 0);
+  }, 0);
+
+  return Math.round(total / data.length);
+}
+
+function getAverageSpiritualReadinessValue(data = []) {
+  if (!data.length) return 0;
+
+  const total = data.reduce((sum, item) => {
+    return sum + getSpiritualReadinessValue(item.status);
+  }, 0);
+
+  return Math.round(total / data.length);
+}
+
+function getScaleLabel(value) {
+  if (value >= 85) return "Muito forte";
+  if (value >= 70) return "Bom";
+  if (value >= 50) return "Moderado";
+  if (value >= 30) return "Atenção";
+  return "Crítico";
+}
+
+function renderDashboardScales() {
+  if (!dashboardScales) return;
+
+  const data = getVisibleInteressados();
+  const prontidao = getAverageSpiritualReadinessValue(data);
+  const progresso = getAverageProgressValue(data);
+
+  if (!data.length) {
+    dashboardScales.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h3>Escalas do painel</h3>
+            <p>Leitura rápida da prontidão espiritual e do avanço dos estudos.</p>
+          </div>
+        </div>
+        <div class="empty-state">Ainda não há interessados suficientes para exibir as escalas.</div>
+      </div>
+    `;
+    return;
+  }
+
+  dashboardScales.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3>Escalas do painel</h3>
+          <p>Leitura rápida da prontidão espiritual e do avanço dos estudos.</p>
+        </div>
+      </div>
+
+      <div class="scale-grid">
+        <div class="scale-card">
+          <div class="scale-top">
+            <strong>Prontidão espiritual</strong>
+            <span>${prontidao}%</span>
+          </div>
+          <div class="scale-bar">
+            <span style="width:${prontidao}%"></span>
+          </div>
+          <p class="scale-caption">${getScaleLabel(prontidao)}</p>
+        </div>
+
+        <div class="scale-card">
+          <div class="scale-top">
+            <strong>Progresso médio dos estudos</strong>
+            <span>${progresso}%</span>
+          </div>
+          <div class="scale-bar">
+            <span style="width:${progresso}%"></span>
+          </div>
+          <p class="scale-caption">${getScaleLabel(progresso)}</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function sortByUpdatedDesc(arr) {
   return [...arr].sort((a, b) => {
     const aTime = new Date(a.atualizadoEm || a.updatedAt || 0).getTime();
@@ -2023,6 +2125,7 @@ function renderAll() {
   }
 
   renderMetrics();
+  renderDashboardScales();
   renderRecentList();
   renderAttentionList();
   renderInteressadosTable();
