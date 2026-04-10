@@ -24,6 +24,9 @@
 </head>
 <body>
   <div id="appRoot">
+    <!-- ========================================================= -->
+    <!-- LOGIN -->
+    <!-- ========================================================= -->
     <section id="authScreen" class="screen auth-screen">
       <div class="auth-shell">
         <div class="auth-brand-panel">
@@ -39,18 +42,18 @@
 
           <div class="auth-feature-list">
             <div class="auth-feature-card">
-              <strong>Painel claro</strong>
-              <span>Total, ativos, em risco e prontos para decisão.</span>
+              <strong>Hierarquia clara</strong>
+              <span>Pastor, líder distrital, líder local e membro com acessos diferentes.</span>
             </div>
 
             <div class="auth-feature-card">
-              <strong>Controle por perfil</strong>
-              <span>Administrador vê tudo. Líder vê apenas o seu local.</span>
+              <strong>Controle por igreja</strong>
+              <span>Líder local vê sua igreja. Membro vê apenas os registros que ele criou.</span>
             </div>
 
             <div class="auth-feature-card">
-              <strong>Progresso automático</strong>
-              <span>Porcentagem e faltantes calculados com base na série.</span>
+              <strong>Acompanhamento real</strong>
+              <span>Status, progresso, interessados em risco e prontidão para decisão.</span>
             </div>
           </div>
         </div>
@@ -58,11 +61,39 @@
         <div class="auth-card">
           <div class="auth-card-header">
             <h2>Entrar</h2>
-            <p>Use seu e-mail e senha para acessar o sistema.</p>
+            <p>Escolha o tipo de acesso e entre com suas credenciais.</p>
           </div>
 
           <form id="loginForm" class="auth-form">
             <div class="field">
+              <label for="loginAccessType">Tipo de acesso</label>
+              <select id="loginAccessType" name="accessType" required>
+                <option value="admin">Pastor / Administrador</option>
+                <option value="distrital">Líder Distrital</option>
+                <option value="local">Líder Local</option>
+                <option value="membro">Membro</option>
+              </select>
+            </div>
+
+            <div class="field" id="loginLocalGroup" style="display:none;">
+              <label for="loginLocal">Igreja</label>
+              <select id="loginLocal" name="local">
+                <option value="">Selecionar igreja</option>
+              </select>
+            </div>
+
+            <div class="field" id="loginUsernameGroup" style="display:none;">
+              <label for="loginUsername">Usuário</label>
+              <input
+                id="loginUsername"
+                name="username"
+                type="text"
+                placeholder="Digite seu usuário"
+                autocomplete="username"
+              />
+            </div>
+
+            <div class="field" id="loginEmailGroup">
               <label for="loginEmail">E-mail</label>
               <input
                 id="loginEmail"
@@ -70,7 +101,6 @@
                 type="email"
                 placeholder="seuemail@exemplo.com"
                 autocomplete="email"
-                required
               />
             </div>
 
@@ -94,12 +124,17 @@
           <div id="authMessage" class="feedback-message hidden"></div>
 
           <div class="auth-card-footer">
-            <p>O acesso ao sistema é restrito a administradores e líderes.</p>
+            <p>
+              O acesso é controlado conforme o perfil. Igrejas disponíveis no login são cadastradas pelo administrador.
+            </p>
           </div>
         </div>
       </div>
     </section>
 
+    <!-- ========================================================= -->
+    <!-- APP PRINCIPAL -->
+    <!-- ========================================================= -->
     <section id="appScreen" class="screen app-screen hidden">
       <div class="app-layout">
         <aside class="sidebar" id="sidebar">
@@ -125,20 +160,21 @@
             <button class="nav-btn active" data-section="dashboardSection">
               Dashboard
             </button>
+
             <button class="nav-btn" data-section="interessadosSection">
               Interessados
             </button>
-            <button class="nav-btn" data-section="instrutoresSection">
-              Instrutores
+
+            <button class="nav-btn" data-section="usuariosSection">
+              Usuários
             </button>
+
             <button class="nav-btn admin-only" data-section="locaisSection">
               Locais
             </button>
+
             <button class="nav-btn admin-only" data-section="catalogoSection">
               Catálogo de Estudos
-            </button>
-            <button class="nav-btn admin-only" data-section="usuariosSection">
-              Usuários
             </button>
           </nav>
 
@@ -172,6 +208,7 @@
 
           <div id="globalMessage" class="feedback-message hidden"></div>
 
+          <!-- ===================== DASHBOARD ===================== -->
           <section id="dashboardSection" class="page-section active">
             <div id="metricsGrid" class="metrics-grid"></div>
 
@@ -198,6 +235,7 @@
             </div>
           </section>
 
+          <!-- ===================== INTERESSADOS ===================== -->
           <section id="interessadosSection" class="page-section">
             <div class="card">
               <div class="card-header card-header-wrap">
@@ -220,7 +258,7 @@
                   <input
                     id="searchInput"
                     type="text"
-                    placeholder="Buscar por nome, telefone, local ou instrutor"
+                    placeholder="Buscar por nome, telefone, igreja, série ou responsável"
                   />
                 </div>
 
@@ -242,7 +280,7 @@
                   <thead>
                     <tr>
                       <th>Nome</th>
-                      <th>Instrutores</th>
+                      <th>Responsável</th>
                       <th>Série</th>
                       <th>Progresso</th>
                       <th>Status</th>
@@ -256,40 +294,97 @@
             </div>
           </section>
 
-          <section id="instrutoresSection" class="page-section">
+          <!-- ===================== USUÁRIOS ===================== -->
+          <section id="usuariosSection" class="page-section">
             <div class="split-grid">
               <div class="card">
                 <div class="card-header">
                   <div>
-                    <h3>Instrutores cadastrados</h3>
-                    <p>Instrutores não precisam de login, apenas de cadastro.</p>
+                    <h3>Usuários do sistema</h3>
+                    <p>Perfis cadastrados e ativos conforme o nível de acesso permitido.</p>
                   </div>
                 </div>
-                <div id="instrutoresList" class="stack-list"></div>
+                <div id="usuariosList" class="stack-list"></div>
               </div>
 
               <div class="card">
                 <div class="card-header">
                   <div>
-                    <h3>Novo instrutor</h3>
-                    <p>Cadastre instrutores vinculados a um local.</p>
+                    <h3>Novo usuário</h3>
+                    <p>Cadastre o tipo de acesso permitido para o usuário.</p>
                   </div>
                 </div>
 
-                <form id="instrutorForm" class="form-grid">
+                <form id="userForm" class="form-grid">
                   <div class="field">
-                    <label for="novoInstrutorNome">Nome do instrutor</label>
-                    <input id="novoInstrutorNome" type="text" />
+                    <label for="novoUsuarioNome">Nome</label>
+                    <input id="novoUsuarioNome" type="text" />
                   </div>
 
                   <div class="field">
-                    <label for="novoInstrutorLocal">Local</label>
-                    <select id="novoInstrutorLocal"></select>
+                    <label for="novoUsuarioPerfil">Perfil</label>
+                    <select id="novoUsuarioPerfil">
+                      <option value="membro">Membro</option>
+                      <option value="local">Líder Local</option>
+                      <option value="distrital">Líder Distrital</option>
+                      <option value="admin">Administrador</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label for="novoUsuarioIgreja">Igreja</label>
+                    <select id="novoUsuarioIgreja"></select>
+                  </div>
+
+                  <div class="field">
+                    <label for="novoUsuarioDistrito">Distrito</label>
+                    <input
+                      id="novoUsuarioDistrito"
+                      type="text"
+                      value="Esplanada"
+                      readonly
+                    />
+                  </div>
+
+                  <div class="field" id="novoUsuarioUsernameGroup">
+                    <label for="novoUsuarioUsername">Usuário</label>
+                    <input
+                      id="novoUsuarioUsername"
+                      type="text"
+                      placeholder="Ex.: joao.silva"
+                    />
+                  </div>
+
+                  <div class="field" id="novoUsuarioSenhaLocalGroup">
+                    <label for="novoUsuarioSenhaLocal">Senha</label>
+                    <input
+                      id="novoUsuarioSenhaLocal"
+                      type="password"
+                      placeholder="Defina uma senha"
+                    />
+                  </div>
+
+                  <div class="field" id="novoUsuarioEmailGroup">
+                    <label for="novoUsuarioEmail">E-mail</label>
+                    <input
+                      id="novoUsuarioEmail"
+                      type="email"
+                      placeholder="seuemail@exemplo.com"
+                    />
+                  </div>
+
+                  <div class="field" id="novoUsuarioSenhaGroup">
+                    <label for="novoUsuarioSenha">Senha</label>
+                    <input
+                      id="novoUsuarioSenha"
+                      type="password"
+                      placeholder="Senha provisória"
+                    />
                   </div>
 
                   <div class="form-actions full-span">
                     <button type="submit" class="btn btn-primary">
-                      Adicionar instrutor
+                      Criar usuário
                     </button>
                   </div>
                 </form>
@@ -297,13 +392,14 @@
             </div>
           </section>
 
+          <!-- ===================== LOCAIS ===================== -->
           <section id="locaisSection" class="page-section">
             <div class="split-grid">
               <div class="card">
                 <div class="card-header">
                   <div>
                     <h3>Locais cadastrados</h3>
-                    <p>Controle completo de igrejas e grupos do distrito.</p>
+                    <p>Igrejas e grupos do distrito cadastrados no sistema.</p>
                   </div>
                 </div>
                 <div id="locaisList" class="stack-list"></div>
@@ -313,7 +409,7 @@
                 <div class="card-header">
                   <div>
                     <h3>Novo local</h3>
-                    <p>Cadastre o local e defina se é igreja ou grupo.</p>
+                    <p>Cadastre igrejas e grupos que ficarão disponíveis no sistema e no login.</p>
                   </div>
                 </div>
 
@@ -345,6 +441,7 @@
             </div>
           </section>
 
+          <!-- ===================== CATÁLOGO ===================== -->
           <section id="catalogoSection" class="page-section">
             <div class="split-grid">
               <div class="card">
@@ -394,75 +491,14 @@
               </div>
             </div>
           </section>
-
-          <section id="usuariosSection" class="page-section">
-            <div class="split-grid">
-              <div class="card">
-                <div class="card-header">
-                  <div>
-                    <h3>Usuários do sistema</h3>
-                    <p>Apenas administradores e líderes têm acesso ao sistema.</p>
-                  </div>
-                </div>
-                <div id="usuariosList" class="stack-list"></div>
-              </div>
-
-              <div class="card admin-only">
-                <div class="card-header">
-                  <div>
-                    <h3>Novo usuário</h3>
-                    <p>Cadastro controlado de administradores e líderes.</p>
-                  </div>
-                </div>
-
-                <form id="userForm" class="form-grid">
-                  <div class="field">
-                    <label for="novoUsuarioNome">Nome</label>
-                    <input id="novoUsuarioNome" type="text" />
-                  </div>
-
-                  <div class="field">
-                    <label for="novoUsuarioEmail">E-mail</label>
-                    <input id="novoUsuarioEmail" type="email" />
-                  </div>
-
-                  <div class="field">
-                    <label for="novoUsuarioSenha">Senha provisória</label>
-                    <input id="novoUsuarioSenha" type="password" />
-                  </div>
-
-                  <div class="field">
-                    <label for="novoUsuarioPerfil">Perfil</label>
-                    <select id="novoUsuarioPerfil">
-                      <option value="lider">Líder</option>
-                      <option value="admin">Administrador</option>
-                    </select>
-                  </div>
-
-                  <div class="field">
-                    <label for="novoUsuarioIgreja">Local</label>
-                    <select id="novoUsuarioIgreja"></select>
-                  </div>
-
-                  <div class="field">
-                    <label for="novoUsuarioDistrito">Distrito</label>
-                    <input id="novoUsuarioDistrito" type="text" value="Esplanada" readonly />
-                  </div>
-
-                  <div class="form-actions full-span">
-                    <button type="submit" class="btn btn-primary">
-                      Criar usuário
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </section>
         </main>
       </div>
     </section>
   </div>
 
+  <!-- ========================================================= -->
+  <!-- MODAL DE INTERESSADO -->
+  <!-- ========================================================= -->
   <div id="interessadoModalBackdrop" class="modal-backdrop hidden">
     <div class="modal modal-lg">
       <div class="modal-header">
@@ -499,7 +535,7 @@
         </div>
 
         <div class="field">
-          <label for="igreja">Local</label>
+          <label for="igreja">Igreja</label>
           <select id="igreja" required></select>
         </div>
 
@@ -508,10 +544,9 @@
           <input id="distrito" type="text" value="Esplanada" readonly />
         </div>
 
-        <div class="field full-span">
-          <label for="instrutor">Instrutores responsáveis</label>
-          <select id="instrutor" required multiple size="6"></select>
-          <small class="helper-text">Segure Ctrl (Windows) ou Command (Mac) para selecionar mais de um.</small>
+        <div class="field">
+          <label for="instrutor">Responsável pelo registro</label>
+          <select id="instrutor" required></select>
         </div>
 
         <div class="field">
@@ -575,6 +610,9 @@
     </div>
   </div>
 
+  <!-- ========================================================= -->
+  <!-- LOADING -->
+  <!-- ========================================================= -->
   <div id="loadingOverlay" class="loading-overlay hidden">
     <div class="loading-card">
       <div class="spinner"></div>
