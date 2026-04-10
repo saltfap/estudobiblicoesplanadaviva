@@ -6,8 +6,10 @@ import {
   deleteDoc,
   doc,
   setDoc,
+  getDoc,
   query,
   where,
+  limit,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
@@ -26,26 +28,12 @@ import { app, db } from "./firebase-config.js";
 
 const DISTRITO_FIXO = "Esplanada";
 
-const DEFAULT_LOCAIS = [
-  { nome: "Bonsucesso", tipo: "igreja" },
-  { nome: "Baraúna", tipo: "igreja" },
-  { nome: "Carambeí Central", tipo: "igreja" },
-  { nome: "Jardim Eldorado", tipo: "igreja" },
-  { nome: "Jardim Esplanada", tipo: "igreja" },
-  { nome: "Jardim Planalto", tipo: "igreja" },
-  { nome: "Los Angeles", tipo: "igreja" },
-  { nome: "Tânia Mara", tipo: "igreja" },
-  { nome: "Vila Borato", tipo: "igreja" },
-  { nome: "Vila Romana", tipo: "igreja" }
-];
-
 const state = {
   user: null,
   interessados: [],
   series: [],
   usuarios: [],
   locais: [],
-  instrutores: [],
   activeSection: "dashboardSection"
 };
 
@@ -80,17 +68,7 @@ const serieFilter = document.getElementById("serieFilter");
 const interessadosTable = document.getElementById("interessadosTable");
 const seriesList = document.getElementById("seriesList");
 const usuariosList = document.getElementById("usuariosList");
-
-// novos blocos, opcionais até o index ser ajustado
 const locaisList = document.getElementById("locaisList");
-const localForm = document.getElementById("localForm");
-const novoLocalNome = document.getElementById("novoLocalNome");
-const novoLocalTipo = document.getElementById("novoLocalTipo");
-
-const instrutoresList = document.getElementById("instrutoresList");
-const instrutorForm = document.getElementById("instrutorForm");
-const novoInstrutorNome = document.getElementById("novoInstrutorNome");
-const novoInstrutorLocal = document.getElementById("novoInstrutorLocal");
 
 const interessadoModalBackdrop = document.getElementById("interessadoModalBackdrop");
 const closeInteressadoModalBtn = document.getElementById("closeInteressadoModalBtn");
@@ -103,7 +81,7 @@ const telefone = document.getElementById("telefone");
 const endereco = document.getElementById("endereco");
 const igreja = document.getElementById("igreja");
 const distrito = document.getElementById("distrito");
-const instrutor = document.getElementById("instrutor");
+const instrutor = document.getElementById("instrutor"); // responsável
 const serieId = document.getElementById("serieId");
 const estudoAtual = document.getElementById("estudoAtual");
 const progressoPreview = document.getElementById("progressoPreview");
@@ -121,13 +99,24 @@ const serieForm = document.getElementById("serieForm");
 const novaSerieNome = document.getElementById("novaSerieNome");
 const novaSerieTotal = document.getElementById("novaSerieTotal");
 
+const localForm = document.getElementById("localForm");
+const novoLocalNome = document.getElementById("novoLocalNome");
+const novoLocalTipo = document.getElementById("novoLocalTipo");
+
 const userForm = document.getElementById("userForm");
 const novoUsuarioNome = document.getElementById("novoUsuarioNome");
-const novoUsuarioEmail = document.getElementById("novoUsuarioEmail");
-const novoUsuarioSenha = document.getElementById("novoUsuarioSenha");
 const novoUsuarioPerfil = document.getElementById("novoUsuarioPerfil");
 const novoUsuarioIgreja = document.getElementById("novoUsuarioIgreja");
 const novoUsuarioDistrito = document.getElementById("novoUsuarioDistrito");
+const novoUsuarioUsername = document.getElementById("novoUsuarioUsername");
+const novoUsuarioSenhaLocal = document.getElementById("novoUsuarioSenhaLocal");
+const novoUsuarioEmail = document.getElementById("novoUsuarioEmail");
+const novoUsuarioSenha = document.getElementById("novoUsuarioSenha");
+
+const novoUsuarioUsernameGroup = document.getElementById("novoUsuarioUsernameGroup");
+const novoUsuarioSenhaLocalGroup = document.getElementById("novoUsuarioSenhaLocalGroup");
+const novoUsuarioEmailGroup = document.getElementById("novoUsuarioEmailGroup");
+const novoUsuarioSenhaGroup = document.getElementById("novoUsuarioSenhaGroup");
 
 /* =========================
    HELPERS
@@ -163,16 +152,15 @@ function escapeHtml(value = "") {
     .replaceAll("'", "&#039;");
 }
 
-function normalizeText(text) {
-  return (text || "")
-    .toString()
+function normalizeText(text = "") {
+  return String(text)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
 }
 
-function slug(text) {
+function slug(text = "") {
   return normalizeText(text).replace(/\s+/g, "-");
 }
 
@@ -180,15 +168,19 @@ function isAdmin() {
   return state.user?.perfil === "admin";
 }
 
-function isLider() {
-  return state.user?.perfil === "lider";
+function isDistrital() {
+  return state.user?.perfil === "distrital";
+}
+
+function isLocal() {
+  return state.user?.perfil === "local";
+}
+
+function isMembro() {
+  return state.user?.perfil === "membro";
 }
 
 function canManageSeries() {
-  return isAdmin();
-}
-
-function canManageUsers() {
   return isAdmin();
 }
 
@@ -196,8 +188,34 @@ function canManageLocais() {
   return isAdmin();
 }
 
-function canManageInstrutores() {
-  return isAdmin() || isLider();
+function canSeeUsersSection() {
+  return isAdmin() || isDistrital() || isLocal();
+}
+
+function canCreateUsers() {
+  return isAdmin() || isDistrital() || isLocal();
+}
+
+function getAllowedProfilesToCreate() {
+  if (isAdmin()) return ["admin", "distrital", "local", "membro"];
+  if (isDistrital()) return ["local", "membro"];
+  if (isLocal()) return ["membro"];
+  return [];
+}
+
+function formatRole(role = "") {
+  switch (role) {
+    case "admin":
+      return "Administrador";
+    case "distrital":
+      return "Líder Distrital";
+    case "local":
+      return "Líder Local";
+    case "membro":
+      return "Membro";
+    default:
+      return role || "-";
+  }
 }
 
 function calcProgress(estudoAtualValue, totalEstudosValue) {
@@ -227,24 +245,19 @@ function isAtRisk(item) {
 }
 
 function isDecision(item) {
-  return (
-    item.status === "Pronto para apelo" ||
-    item.status === "Pronto para batismo"
-  );
+  return item.status === "Pronto para apelo" || item.status === "Pronto para batismo";
 }
 
 function sortByUpdatedDesc(arr) {
   return [...arr].sort((a, b) => {
-    const aTime = new Date(a.atualizadoEm || 0).getTime();
-    const bTime = new Date(b.atualizadoEm || 0).getTime();
+    const aTime = new Date(a.atualizadoEm || a.updatedAt || 0).getTime();
+    const bTime = new Date(b.atualizadoEm || b.updatedAt || 0).getTime();
     return bTime - aTime;
   });
 }
 
 function sortByName(arr) {
-  return [...arr].sort((a, b) =>
-    (a.nome || "").localeCompare(b.nome || "", "pt-BR")
-  );
+  return [...arr].sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt-BR"));
 }
 
 function getSerieById(id) {
@@ -255,52 +268,204 @@ function getLocalById(id) {
   return state.locais.find((l) => l.id === id);
 }
 
-function getInstrutorById(id) {
-  return state.instrutores.find((i) => i.id === id);
-}
-
-function getCurrentUserLocalName() {
-  return state.user?.localNome || state.user?.igreja || "";
+function getUserById(id) {
+  return state.usuarios.find((u) => u.id === id);
 }
 
 function getCurrentUserLocalId() {
-  return state.user?.localId || "";
+  return state.user?.igrejaId || state.user?.localId || "";
 }
 
-function formatInstrutoresNomes(item) {
-  if (Array.isArray(item.instrutorNomes) && item.instrutorNomes.length) {
-    return item.instrutorNomes.join(", ");
-  }
-  if (item.instrutorNome) {
-    return item.instrutorNome;
-  }
-  return "-";
+function getCurrentUserLocalName() {
+  return state.user?.igrejaNome || state.user?.localNome || state.user?.igreja || "";
 }
 
-function ensureArray(value) {
-  if (Array.isArray(value)) return value;
-  if (value === undefined || value === null || value === "") return [];
-  return [value];
+function getSectionTitle(sectionId) {
+  const map = {
+    dashboardSection: "Dashboard",
+    interessadosSection: "Interessados",
+    usuariosSection: "Usuários",
+    locaisSection: "Locais",
+    catalogoSection: "Catálogo de Estudos"
+  };
+  return map[sectionId] || "Esplanada Viva";
 }
 
-function getVisibleInteressados() {
-  let data = [...state.interessados];
+function getAllowedSections() {
+  const base = ["dashboardSection", "interessadosSection"];
+  if (canSeeUsersSection()) base.push("usuariosSection");
+  if (canManageLocais()) base.push("locaisSection");
+  if (canManageSeries()) base.push("catalogoSection");
+  return base;
+}
 
-  if (isAdmin()) {
-    return sortByUpdatedDesc(data);
+function setSection(sectionId) {
+  const allowed = getAllowedSections();
+  const safeSection = allowed.includes(sectionId) ? sectionId : "dashboardSection";
+
+  state.activeSection = safeSection;
+
+  document.querySelectorAll(".page-section").forEach((section) => {
+    section.classList.toggle("active", section.id === safeSection);
+  });
+
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.section === safeSection);
+  });
+
+  if (pageTitle) {
+    pageTitle.textContent = getSectionTitle(safeSection);
+  }
+}
+
+function applyRoleUI() {
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
+    const section = btn.dataset.section;
+    const allowed = getAllowedSections().includes(section);
+    btn.style.display = allowed ? "" : "none";
+  });
+
+  document.querySelectorAll(".admin-only").forEach((el) => {
+    el.style.display = isAdmin() ? "" : "none";
+  });
+
+  document.querySelectorAll(".admin-or-distrital").forEach((el) => {
+    el.style.display = isAdmin() || isDistrital() ? "" : "none";
+  });
+
+  document.querySelectorAll(".local-only").forEach((el) => {
+    el.style.display = isLocal() ? "" : "none";
+  });
+
+  document.querySelectorAll(".membro-only").forEach((el) => {
+    el.style.display = isMembro() ? "" : "none";
+  });
+
+  if (!getAllowedSections().includes(state.activeSection)) {
+    state.activeSection = "dashboardSection";
   }
 
-  if (isLider()) {
+  setSection(state.activeSection);
+}
+
+function buildEmailAuth(username, igrejaId) {
+  const safeUsername = normalizeText(username).replace(/[^a-z0-9._-]/g, "");
+  const safeChurch = String(igrejaId || "").replace(/[^a-zA-Z0-9]/g, "");
+  return `${safeUsername}__${safeChurch}@app.esplanadaviva.local`;
+}
+
+/* =========================
+   FIRESTORE LOAD
+========================= */
+async function loadSeries() {
+  const snap = await getDocs(collection(db, "series"));
+  state.series = snap.docs.map((item) => ({
+    id: item.id,
+    ...item.data()
+  }));
+}
+
+async function loadLocais() {
+  const snap = await getDocs(collection(db, "locais"));
+  state.locais = snap.docs
+    .map((item) => ({
+      id: item.id,
+      ...item.data()
+    }))
+    .filter((item) => item.ativo !== false);
+}
+
+async function loadUsuarios() {
+  let snap;
+
+  if (isAdmin() || isDistrital()) {
+    snap = await getDocs(collection(db, "usuarios"));
+    state.usuarios = snap.docs
+      .map((item) => ({
+        id: item.id,
+        ...item.data()
+      }))
+      .filter((item) => item.ativo !== false);
+    return;
+  }
+
+  if (isLocal()) {
     const localId = getCurrentUserLocalId();
-    const localNome = normalizeText(getCurrentUserLocalName());
-
-    data = data.filter((item) => {
-      if (localId && item.localId === localId) return true;
-      return normalizeText(item.localNome || item.igreja) === localNome;
-    });
+    snap = await getDocs(
+      query(collection(db, "usuarios"), where("igrejaId", "==", localId))
+    );
+    state.usuarios = snap.docs
+      .map((item) => ({
+        id: item.id,
+        ...item.data()
+      }))
+      .filter((item) => item.ativo !== false);
+    return;
   }
 
-  return sortByUpdatedDesc(data);
+  if (isMembro()) {
+    state.usuarios = state.user ? [state.user] : [];
+    return;
+  }
+
+  state.usuarios = [];
+}
+
+async function loadInteressados() {
+  const snap = await getDocs(collection(db, "interessados"));
+  let data = snap.docs.map((item) => ({
+    id: item.id,
+    ...item.data()
+  }));
+
+  if (isAdmin() || isDistrital()) {
+    state.interessados = data;
+    return;
+  }
+
+  if (isLocal()) {
+    const localId = getCurrentUserLocalId();
+    data = data.filter((item) => item.igrejaId === localId);
+    state.interessados = data;
+    return;
+  }
+
+  if (isMembro()) {
+    data = data.filter((item) => item.criadoPorId === state.user.uid);
+    state.interessados = data;
+    return;
+  }
+
+  state.interessados = [];
+}
+
+async function refreshData() {
+  if (!state.user) return;
+
+  showLoading();
+  clearMessage();
+
+  try {
+    await Promise.all([
+      loadLocais(),
+      loadSeries(),
+      loadUsuarios(),
+      loadInteressados()
+    ]);
+    renderAll();
+  } catch (error) {
+    console.error("Erro ao carregar dados:", error);
+    showMessage("Não foi possível carregar os dados do sistema.", "error");
+  } finally {
+    hideLoading();
+  }
+}
+
+/* =========================
+   FILTROS
+========================= */
+function getVisibleInteressados() {
+  return sortByUpdatedDesc(state.interessados);
 }
 
 function getFilteredInteressados() {
@@ -313,14 +478,13 @@ function getFilteredInteressados() {
 
   if (search) {
     data = data.filter((item) => {
-      const instrutoresTexto = ensureArray(item.instrutorNomes).join(" ");
       return (
         normalizeText(item.nome).includes(search) ||
         normalizeText(item.telefone).includes(search) ||
-        normalizeText(item.localNome || item.igreja).includes(search) ||
-        normalizeText(item.distrito).includes(search) ||
-        normalizeText(instrutoresTexto).includes(search) ||
-        normalizeText(item.serieNome).includes(search)
+        normalizeText(item.igrejaNome || item.igreja).includes(search) ||
+        normalizeText(item.responsavelNome || "").includes(search) ||
+        normalizeText(item.criadoPorNome || "").includes(search) ||
+        normalizeText(item.serieNome || "").includes(search)
       );
     });
   }
@@ -340,215 +504,8 @@ function getFilteredInteressados() {
   return data;
 }
 
-function getSectionTitle(sectionId) {
-  const map = {
-    dashboardSection: "Dashboard",
-    interessadosSection: "Interessados",
-    catalogoSection: "Catálogo de Estudos",
-    usuariosSection: "Usuários",
-    locaisSection: "Locais",
-    instrutoresSection: "Instrutores"
-  };
-  return map[sectionId] || "Esplanada Viva";
-}
-
-function setSection(sectionId) {
-  state.activeSection = sectionId;
-
-  document.querySelectorAll(".page-section").forEach((section) => {
-    section.classList.toggle("active", section.id === sectionId);
-  });
-
-  document.querySelectorAll(".nav-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.section === sectionId);
-  });
-
-  if (pageTitle) {
-    pageTitle.textContent = getSectionTitle(sectionId);
-  }
-}
-
 /* =========================
-   MODAL
-========================= */
-function openInteressadoModal() {
-  interessadoModalBackdrop?.classList.remove("hidden");
-}
-
-function closeInteressadoModal() {
-  interessadoModalBackdrop?.classList.add("hidden");
-}
-
-function renderLocalField(selectedId = "") {
-  if (!igreja) return;
-
-  const visibleLocais = sortByName(
-    canManageLocais() || isAdmin()
-      ? state.locais
-      : state.locais.filter((l) => {
-          const localId = getCurrentUserLocalId();
-          const localNome = normalizeText(getCurrentUserLocalName());
-          if (localId) return l.id === localId;
-          return normalizeText(l.nome) === localNome;
-        })
-  );
-
-  const localLider = visibleLocais[0] || null;
-
-  if (igreja.tagName === "SELECT") {
-    igreja.innerHTML =
-      `<option value="">Selecionar local</option>` +
-      visibleLocais
-        .map(
-          (local) =>
-            `<option value="${local.id}">${escapeHtml(local.nome)} (${escapeHtml(local.tipo || "igreja")})</option>`
-        )
-        .join("");
-
-    if (isLider() && !isAdmin()) {
-      igreja.disabled = true;
-      if (localLider) {
-        igreja.value = localLider.id;
-      }
-      return;
-    }
-
-    igreja.disabled = false;
-    if (selectedId) {
-      igreja.value = selectedId;
-    }
-    return;
-  }
-
-  // fallback para input até o index ser ajustado
-  if (isLider() && !isAdmin()) {
-    igreja.value = localLider?.nome || getCurrentUserLocalName();
-    igreja.readOnly = true;
-  } else {
-    igreja.readOnly = false;
-    if (selectedId) {
-      const found = getLocalById(selectedId);
-      igreja.value = found?.nome || "";
-    }
-  }
-}
-
-function renderInstrutorOptions(selectedIds = []) {
-  if (!instrutor) return;
-
-  const ids = ensureArray(selectedIds);
-
-  let visibleInstrutores = [...state.instrutores];
-
-  if (isLider() && !isAdmin()) {
-    const localId = getCurrentUserLocalId();
-    const localNome = normalizeText(getCurrentUserLocalName());
-
-    visibleInstrutores = visibleInstrutores.filter((item) => {
-      if (localId && item.localId === localId) return true;
-      return normalizeText(item.localNome) === localNome;
-    });
-  }
-
-  visibleInstrutores = sortByName(visibleInstrutores.filter((i) => i.ativo !== false));
-
-  if (instrutor.tagName === "SELECT") {
-    instrutor.disabled = false;
-
-    if (instrutor.multiple) {
-      instrutor.innerHTML = visibleInstrutores
-        .map(
-          (item) =>
-            `<option value="${item.id}">${escapeHtml(item.nome)}</option>`
-        )
-        .join("");
-
-      Array.from(instrutor.options).forEach((option) => {
-        option.selected = ids.includes(option.value);
-      });
-      return;
-    }
-
-    instrutor.innerHTML =
-      `<option value="">Selecionar instrutor</option>` +
-      visibleInstrutores
-        .map(
-          (item) =>
-            `<option value="${item.id}">${escapeHtml(item.nome)}</option>`
-        )
-        .join("");
-
-    if (ids.length) {
-      instrutor.value = ids[0];
-    }
-    return;
-  }
-
-  // fallback para input/text caso o HTML ainda esteja antigo
-  const selectedNames = ids
-    .map((id) => getInstrutorById(id)?.nome)
-    .filter(Boolean);
-
-  instrutor.value = selectedNames.join(", ");
-}
-
-function resetInteressadoForm() {
-  interessadoForm?.reset();
-  interessadoId.value = "";
-  interessadoModalTitle.textContent = "Novo interessado";
-
-  renderSerieOptions();
-  renderLocalField();
-  renderInstrutorOptions();
-  renderStatusAndInterestOptions();
-
-  if (distrito) {
-    distrito.value = DISTRITO_FIXO;
-    distrito.readOnly = true;
-    distrito.disabled = true;
-  }
-
-  status.value = "Ativo";
-  interesse.value = "Médio";
-  ultimoContato.value = new Date().toISOString().slice(0, 10);
-  estudoAtual.value = 0;
-
-  updateProgressPreview();
-}
-
-function fillInteressadoForm(item) {
-  interessadoId.value = item.id;
-  nome.value = item.nome || "";
-  telefone.value = item.telefone || "";
-  endereco.value = item.endereco || "";
-
-  renderLocalField(item.localId || "");
-  if (igreja && igreja.tagName !== "SELECT") {
-    igreja.value = item.localNome || item.igreja || "";
-  }
-
-  if (distrito) {
-    distrito.value = DISTRITO_FIXO;
-    distrito.readOnly = true;
-    distrito.disabled = true;
-  }
-
-  renderInstrutorOptions(item.instrutorIds || item.instrutorId || []);
-  renderSerieOptions();
-  serieId.value = item.serieId || "";
-  estudoAtual.value = item.estudoAtual ?? 0;
-  renderStatusAndInterestOptions();
-  status.value = item.status || "Ativo";
-  interesse.value = item.interesse || "Médio";
-  ultimoContato.value = item.ultimoContato || "";
-  observacoes.value = item.observacoes || "";
-  interessadoModalTitle.textContent = "Editar interessado";
-
-  updateProgressPreview();
-}
-
-/* =========================
-   RENDER
+   RENDER FORM BASICO
 ========================= */
 function renderStatusAndInterestOptions() {
   status.innerHTML = statusOptions
@@ -584,10 +541,7 @@ function renderFilters() {
     serieFilter.innerHTML =
       `<option value="Todas">Todas as séries</option>` +
       sortByName(state.series)
-        .map(
-          (serie) =>
-            `<option value="${serie.id}">${escapeHtml(serie.nome)}</option>`
-        )
+        .map((serie) => `<option value="${serie.id}">${escapeHtml(serie.nome)}</option>`)
         .join("");
     serieFilter.value = current;
   }
@@ -600,10 +554,7 @@ function renderSerieOptions() {
   serieId.innerHTML =
     `<option value="">Selecionar série</option>` +
     sortByName(state.series)
-      .map(
-        (serie) =>
-          `<option value="${serie.id}">${escapeHtml(serie.nome)} (${serie.totalEstudos})</option>`
-      )
+      .map((serie) => `<option value="${serie.id}">${escapeHtml(serie.nome)} (${serie.totalEstudos})</option>`)
       .join("");
 
   if (current) {
@@ -611,44 +562,79 @@ function renderSerieOptions() {
   }
 }
 
-function renderNovoInstrutorLocalOptions() {
-  if (!novoInstrutorLocal) return;
+function renderLocalOptions(targetSelect, { onlyCurrent = false, includeEmpty = true } = {}) {
+  if (!targetSelect) return;
 
-  const locais = isAdmin()
-    ? sortByName(state.locais)
-    : sortByName(
-        state.locais.filter((l) => {
-          const localId = getCurrentUserLocalId();
-          const localNome = normalizeText(getCurrentUserLocalName());
-          if (localId) return l.id === localId;
-          return normalizeText(l.nome) === localNome;
-        })
-      );
+  let locais = [...state.locais];
 
-  novoInstrutorLocal.innerHTML =
-    `<option value="">Selecionar local</option>` +
-    locais.map((local) => `<option value="${local.id}">${escapeHtml(local.nome)}</option>`).join("");
+  if (onlyCurrent) {
+    const localId = getCurrentUserLocalId();
+    locais = locais.filter((item) => item.id === localId);
+  }
 
-  if (isLider() && !isAdmin() && locais[0]) {
-    novoInstrutorLocal.value = locais[0].id;
-    novoInstrutorLocal.disabled = true;
-  } else {
-    novoInstrutorLocal.disabled = false;
+  locais = sortByName(locais);
+
+  targetSelect.innerHTML =
+    `${includeEmpty ? '<option value="">Selecionar igreja</option>' : ""}` +
+    locais.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}</option>`).join("");
+}
+
+function renderInteressadoLocalOptions(selectedId = "") {
+  if (!igreja) return;
+
+  if (isLocal() || isMembro()) {
+    renderLocalOptions(igreja, { onlyCurrent: true });
+    igreja.value = getCurrentUserLocalId();
+    igreja.disabled = true;
+    return;
+  }
+
+  renderLocalOptions(igreja);
+  igreja.disabled = false;
+
+  if (selectedId) {
+    igreja.value = selectedId;
   }
 }
 
-function renderNovoUsuarioLocalOptions() {
-  if (!novoUsuarioIgreja || novoUsuarioIgreja.tagName !== "SELECT") return;
+function getResponsibleUsersForCurrentContext() {
+  if (isAdmin() || isDistrital()) {
+    return sortByName(state.usuarios.filter((u) => u.ativo !== false));
+  }
 
-  const current = novoUsuarioIgreja.value || "";
-  novoUsuarioIgreja.innerHTML =
-    `<option value="">Selecionar local</option>` +
-    sortByName(state.locais)
-      .map((local) => `<option value="${local.id}">${escapeHtml(local.nome)}</option>`)
-      .join("");
+  if (isLocal()) {
+    const localId = getCurrentUserLocalId();
+    return sortByName(
+      state.usuarios.filter((u) => u.ativo !== false && u.igrejaId === localId)
+    );
+  }
 
-  if (current) {
-    novoUsuarioIgreja.value = current;
+  if (isMembro()) {
+    return state.user ? [state.user] : [];
+  }
+
+  return [];
+}
+
+function renderResponsavelOptions(selectedId = "") {
+  if (!instrutor) return;
+
+  const users = getResponsibleUsersForCurrentContext();
+
+  instrutor.innerHTML =
+    `<option value="">Selecionar responsável</option>` +
+    users.map((u) => `<option value="${u.id}">${escapeHtml(u.nome)}</option>`).join("");
+
+  if (isMembro()) {
+    instrutor.value = state.user?.uid || "";
+    instrutor.disabled = true;
+    return;
+  }
+
+  instrutor.disabled = false;
+
+  if (selectedId) {
+    instrutor.value = selectedId;
   }
 }
 
@@ -667,6 +653,74 @@ function updateProgressPreview() {
     `${Math.min(atual, total)} de ${total} • ${progress.porcentagem}% • faltam ${Math.max(0, total - Math.min(atual, total))}`;
 }
 
+/* =========================
+   MODAL INTERESSADO
+========================= */
+function openInteressadoModal() {
+  interessadoModalBackdrop?.classList.remove("hidden");
+}
+
+function closeInteressadoModal() {
+  interessadoModalBackdrop?.classList.add("hidden");
+}
+
+function resetInteressadoForm() {
+  interessadoForm?.reset();
+  interessadoId.value = "";
+  interessadoModalTitle.textContent = "Novo interessado";
+
+  renderInteressadoLocalOptions();
+  renderResponsavelOptions();
+  renderSerieOptions();
+  renderStatusAndInterestOptions();
+
+  if (distrito) {
+    distrito.value = DISTRITO_FIXO;
+    distrito.readOnly = true;
+  }
+
+  status.value = "Ativo";
+  interesse.value = "Médio";
+  ultimoContato.value = new Date().toISOString().slice(0, 10);
+  estudoAtual.value = 0;
+
+  updateProgressPreview();
+}
+
+function fillInteressadoForm(item) {
+  interessadoId.value = item.id;
+  nome.value = item.nome || "";
+  telefone.value = item.telefone || "";
+  endereco.value = item.endereco || "";
+
+  renderInteressadoLocalOptions(item.igrejaId || "");
+  if (!igreja.disabled) {
+    igreja.value = item.igrejaId || "";
+  }
+
+  renderResponsavelOptions(item.responsavelId || "");
+  renderSerieOptions();
+  serieId.value = item.serieId || "";
+
+  estudoAtual.value = item.estudoAtual ?? 0;
+  renderStatusAndInterestOptions();
+  status.value = item.status || "Ativo";
+  interesse.value = item.interesse || "Médio";
+  ultimoContato.value = item.ultimoContato || "";
+  observacoes.value = item.observacoes || "";
+
+  if (distrito) {
+    distrito.value = DISTRITO_FIXO;
+    distrito.readOnly = true;
+  }
+
+  interessadoModalTitle.textContent = "Editar interessado";
+  updateProgressPreview();
+}
+
+/* =========================
+   DASHBOARD / TABELAS
+========================= */
 function renderMetrics() {
   const data = getVisibleInteressados();
 
@@ -726,10 +780,10 @@ function renderRecentList() {
         <article class="stack-item">
           <div class="stack-item-top">
             <h4>${escapeHtml(item.nome)}</h4>
-            <span class="tiny-muted">${escapeHtml(formatInstrutoresNomes(item))}</span>
+            <span class="tiny-muted">${escapeHtml(item.responsavelNome || "-")}</span>
           </div>
           <p class="stack-item-sub">
-            ${escapeHtml(item.localNome || item.igreja || "Sem local")} • ${escapeHtml(item.serieNome || "Sem série")}
+            ${escapeHtml(item.igrejaNome || "Sem igreja")} • ${escapeHtml(item.serieNome || "Sem série")}
           </p>
           <div class="progress-meta">
             ${p.capped} de ${p.total} • ${p.porcentagem}% • faltam ${p.faltantes}
@@ -778,24 +832,18 @@ function renderAttentionList() {
 function renderInteressadosTable() {
   const data = getFilteredInteressados();
 
-  if (!interessadosTable) return;
-
   if (!data.length) {
-    if (interessadosTable.tagName === "TBODY") {
-      interessadosTable.innerHTML = `
-        <tr>
-          <td colspan="7">
-            <div class="empty-state">Nenhum registro encontrado.</div>
-          </td>
-        </tr>
-      `;
-    } else {
-      interessadosTable.innerHTML = `<div class="empty-state">Nenhum registro encontrado.</div>`;
-    }
+    interessadosTable.innerHTML = `
+      <tr>
+        <td colspan="7">
+          <div class="empty-state">Nenhum registro encontrado.</div>
+        </td>
+      </tr>
+    `;
     return;
   }
 
-  const markup = data
+  interessadosTable.innerHTML = data
     .map((item) => {
       const p = calcProgress(item.estudoAtual, item.totalEstudos);
 
@@ -803,9 +851,9 @@ function renderInteressadosTable() {
         <tr>
           <td>
             <strong>${escapeHtml(item.nome)}</strong><br>
-            <span class="tiny-muted">${escapeHtml(item.localNome || item.igreja || "Sem local")} • ${escapeHtml(DISTRITO_FIXO)}</span>
+            <span class="tiny-muted">${escapeHtml(item.igrejaNome || "Sem igreja")} • ${escapeHtml(item.distrito || DISTRITO_FIXO)}</span>
           </td>
-          <td>${escapeHtml(formatInstrutoresNomes(item))}</td>
+          <td>${escapeHtml(item.responsavelNome || item.criadoPorNome || "-")}</td>
           <td>${escapeHtml(item.serieNome || "-")}</td>
           <td>
             <div class="progress-meta">${p.capped} de ${p.total} • ${p.porcentagem}%</div>
@@ -822,37 +870,6 @@ function renderInteressadosTable() {
             </div>
           </td>
         </tr>
-      `;
-    })
-    .join("");
-
-  if (interessadosTable.tagName === "TBODY") {
-    interessadosTable.innerHTML = markup;
-    return;
-  }
-
-  // fallback para futuro layout em cards/lista
-  interessadosTable.innerHTML = data
-    .map((item) => {
-      const p = calcProgress(item.estudoAtual, item.totalEstudos);
-      return `
-        <article class="stack-item">
-          <div class="stack-item-top">
-            <h4>${escapeHtml(item.nome)}</h4>
-            <span class="tiny-muted">${escapeHtml(item.localNome || item.igreja || "Sem local")}</span>
-          </div>
-          <p class="stack-item-sub">${escapeHtml(formatInstrutoresNomes(item))}</p>
-          <div class="progress-meta">${p.capped} de ${p.total} • ${p.porcentagem}%</div>
-          <div class="progress-bar"><span style="width:${p.porcentagem}%"></span></div>
-          <div class="pill-row">
-            <span class="pill status-${slug(item.status)}">${escapeHtml(item.status)}</span>
-            <span class="pill interest-${slug(item.interesse)}">${escapeHtml(item.interesse)}</span>
-          </div>
-          <div class="action-row" style="margin-top:12px;">
-            <button class="btn btn-secondary btn-sm" data-edit-interessado="${item.id}">Editar</button>
-            <button class="btn btn-danger btn-sm" data-delete-interessado="${item.id}">Excluir</button>
-          </div>
-        </article>
       `;
     })
     .join("");
@@ -890,29 +907,48 @@ function renderSeriesList() {
     .join("");
 }
 
+function getVisibleUsersList() {
+  if (isAdmin() || isDistrital()) {
+    return sortByName(state.usuarios);
+  }
+
+  if (isLocal()) {
+    const localId = getCurrentUserLocalId();
+    return sortByName(state.usuarios.filter((u) => u.igrejaId === localId));
+  }
+
+  return [];
+}
+
 function renderUsuariosList() {
   if (!usuariosList) return;
 
-  if (!canManageUsers()) {
-    usuariosList.innerHTML = `<div class="empty-state">Apenas administradores podem ver usuários.</div>`;
+  if (!canSeeUsersSection()) {
+    usuariosList.innerHTML = `<div class="empty-state">Sem permissão para visualizar usuários.</div>`;
     return;
   }
 
-  if (!state.usuarios.length) {
+  const visible = getVisibleUsersList();
+
+  if (!visible.length) {
     usuariosList.innerHTML = `<div class="empty-state">Nenhum usuário cadastrado.</div>`;
     return;
   }
 
-  usuariosList.innerHTML = sortByName(state.usuarios)
+  usuariosList.innerHTML = visible
     .map((usuario) => {
+      const loginInfo = ["admin", "distrital"].includes(usuario.perfil)
+        ? (usuario.email || usuario.emailAuth || "-")
+        : (usuario.username || "-");
+
       return `
         <article class="stack-item">
           <div class="stack-item-top">
             <h4>${escapeHtml(usuario.nome || "Sem nome")}</h4>
-            <span class="tiny-muted">${escapeHtml(usuario.perfil || "-")}</span>
+            <span class="tiny-muted">${escapeHtml(formatRole(usuario.perfil))}</span>
           </div>
           <p class="stack-item-sub">
-            ${escapeHtml(usuario.email || "-")} • ${escapeHtml(usuario.localNome || usuario.igreja || "Sem local")} • ${escapeHtml(DISTRITO_FIXO)}
+            ${escapeHtml(loginInfo)} • ${escapeHtml(usuario.igrejaNome || "Sem igreja")} • ${escapeHtml(usuario.distrito || DISTRITO_FIXO)}
           </p>
           <div class="pill-row">
             <span class="pill ${usuario.ativo ? "status-ativo" : "status-desinteressado"}">
@@ -957,276 +993,135 @@ function renderLocaisList() {
     .join("");
 }
 
-function renderInstrutoresList() {
-  if (!instrutoresList) return;
+/* =========================
+   FORM USUARIOS
+========================= */
+function renderUserProfileOptions() {
+  if (!novoUsuarioPerfil) return;
 
-  if (!canManageInstrutores()) {
-    instrutoresList.innerHTML = `<div class="empty-state">Sem permissão para gerenciar instrutores.</div>`;
-    return;
-  }
+  const allowed = getAllowedProfilesToCreate();
+  const labels = {
+    admin: "Administrador",
+    distrital: "Líder Distrital",
+    local: "Líder Local",
+    membro: "Membro"
+  };
 
-  let data = [...state.instrutores];
-
-  if (isLider() && !isAdmin()) {
-    const localId = getCurrentUserLocalId();
-    const localNome = normalizeText(getCurrentUserLocalName());
-
-    data = data.filter((item) => {
-      if (localId && item.localId === localId) return true;
-      return normalizeText(item.localNome) === localNome;
-    });
-  }
-
-  if (!data.length) {
-    instrutoresList.innerHTML = `<div class="empty-state">Nenhum instrutor cadastrado.</div>`;
-    return;
-  }
-
-  instrutoresList.innerHTML = sortByName(data)
-    .map((item) => {
-      return `
-        <article class="stack-item">
-          <div class="stack-item-top">
-            <h4>${escapeHtml(item.nome)}</h4>
-            <span class="tiny-muted">${escapeHtml(item.localNome || "-")}</span>
-          </div>
-          <p class="stack-item-sub">${escapeHtml(DISTRITO_FIXO)}</p>
-          <div class="action-row">
-            <button class="btn btn-secondary btn-sm" data-edit-instrutor="${item.id}">Editar</button>
-            <button class="btn btn-danger btn-sm" data-delete-instrutor="${item.id}">Excluir</button>
-          </div>
-        </article>
-      `;
-    })
+  const current = novoUsuarioPerfil.value;
+  novoUsuarioPerfil.innerHTML = allowed
+    .map((profile) => `<option value="${profile}">${labels[profile]}</option>`)
     .join("");
-}
 
-function renderAll() {
-  renderFilters();
-  renderSerieOptions();
-  renderLocalField();
-  renderInstrutorOptions();
-  renderNovoInstrutorLocalOptions();
-  renderNovoUsuarioLocalOptions();
-  renderStatusAndInterestOptions();
-  updateProgressPreview();
-  renderMetrics();
-  renderRecentList();
-  renderAttentionList();
-  renderInteressadosTable();
-  renderSeriesList();
-  renderUsuariosList();
-  renderLocaisList();
-  renderInstrutoresList();
-}
-
-/* =========================
-   FIRESTORE
-========================= */
-async function loadSeries() {
-  const snap = await getDocs(collection(db, "series"));
-  state.series = snap.docs.map((item) => ({
-    id: item.id,
-    ...item.data()
-  }));
-}
-
-async function loadUsuarios() {
-  if (!canManageUsers()) {
-    state.usuarios = [];
-    return;
+  if (allowed.includes(current)) {
+    novoUsuarioPerfil.value = current;
+  } else if (allowed.length) {
+    novoUsuarioPerfil.value = allowed[0];
   }
 
-  const snap = await getDocs(collection(db, "usuarios"));
-  state.usuarios = snap.docs.map((item) => ({
-    id: item.id,
-    ...item.data()
-  }));
+  updateUserFormByProfile();
 }
 
-async function loadLocais() {
-  const snap = await getDocs(collection(db, "locais"));
-  state.locais = snap.docs.map((item) => ({
-    id: item.id,
-    ...item.data()
-  }));
-}
+function renderUserLocalOptions() {
+  if (!novoUsuarioIgreja) return;
 
-async function loadInstrutores() {
-  let snap;
+  let locais = [...state.locais];
 
-  if (isAdmin()) {
-    snap = await getDocs(collection(db, "instrutores"));
-  } else {
+  if (isLocal()) {
     const localId = getCurrentUserLocalId();
-    if (localId) {
-      snap = await getDocs(
-        query(collection(db, "instrutores"), where("localId", "==", localId))
-      );
-    } else {
-      snap = await getDocs(collection(db, "instrutores"));
-    }
+    locais = locais.filter((item) => item.id === localId);
   }
 
-  let data = snap.docs.map((item) => ({
-    id: item.id,
-    ...item.data()
-  }));
+  locais = sortByName(locais);
 
-  if (!isAdmin()) {
-    const localNome = normalizeText(getCurrentUserLocalName());
-    data = data.filter((item) => {
-      const localId = getCurrentUserLocalId();
-      if (localId && item.localId === localId) return true;
-      return normalizeText(item.localNome) === localNome;
-    });
-  }
+  novoUsuarioIgreja.innerHTML =
+    `<option value="">Selecionar igreja</option>` +
+    locais.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}</option>`).join("");
 
-  state.instrutores = data;
-}
-
-async function loadInteressados() {
-  if (isAdmin()) {
-    const snap = await getDocs(collection(db, "interessados"));
-    state.interessados = snap.docs.map((item) => ({
-      id: item.id,
-      ...item.data()
-    }));
-    return;
-  }
-
-  const localId = getCurrentUserLocalId();
-  let snap;
-
-  if (localId) {
-    snap = await getDocs(
-      query(collection(db, "interessados"), where("localId", "==", localId))
-    );
+  if (isLocal() && locais[0]) {
+    novoUsuarioIgreja.value = locais[0].id;
+    novoUsuarioIgreja.disabled = true;
   } else {
-    snap = await getDocs(collection(db, "interessados"));
+    novoUsuarioIgreja.disabled = false;
   }
-
-  let data = snap.docs.map((item) => ({
-    id: item.id,
-    ...item.data()
-  }));
-
-  const localNome = normalizeText(getCurrentUserLocalName());
-  data = data.filter((item) => {
-    if (localId && item.localId === localId) return true;
-    return normalizeText(item.localNome || item.igreja) === localNome;
-  });
-
-  state.interessados = data;
 }
 
-async function refreshData() {
-  if (!state.user) return;
+function updateUserFormByProfile() {
+  const profile = novoUsuarioPerfil?.value || "membro";
+  const globalAccount = profile === "admin" || profile === "distrital";
+  const localAccount = profile === "local" || profile === "membro";
 
-  showLoading();
-  clearMessage();
+  if (novoUsuarioUsernameGroup) {
+    novoUsuarioUsernameGroup.style.display = localAccount ? "" : "none";
+  }
 
-  try {
-    await Promise.all([
-      loadLocais(),
-      loadSeries(),
-      loadUsuarios(),
-      loadInstrutores(),
-      loadInteressados()
-    ]);
+  if (novoUsuarioSenhaLocalGroup) {
+    novoUsuarioSenhaLocalGroup.style.display = localAccount ? "" : "none";
+  }
 
-    renderAll();
-  } catch (error) {
-    console.error("Erro ao carregar dados:", error);
-    showMessage("Não foi possível carregar os dados do sistema.", "error");
-  } finally {
-    hideLoading();
+  if (novoUsuarioEmailGroup) {
+    novoUsuarioEmailGroup.style.display = globalAccount ? "" : "none";
+  }
+
+  if (novoUsuarioSenhaGroup) {
+    novoUsuarioSenhaGroup.style.display = globalAccount ? "" : "none";
+  }
+
+  if (novoUsuarioUsername) {
+    novoUsuarioUsername.required = localAccount;
+    if (!localAccount) novoUsuarioUsername.value = "";
+  }
+
+  if (novoUsuarioSenhaLocal) {
+    novoUsuarioSenhaLocal.required = localAccount;
+    if (!localAccount) novoUsuarioSenhaLocal.value = "";
+  }
+
+  if (novoUsuarioEmail) {
+    novoUsuarioEmail.required = globalAccount;
+    if (!globalAccount) novoUsuarioEmail.value = "";
+  }
+
+  if (novoUsuarioSenha) {
+    novoUsuarioSenha.required = globalAccount;
+    if (!globalAccount) novoUsuarioSenha.value = "";
+  }
+
+  if (novoUsuarioIgreja) {
+    novoUsuarioIgreja.required = localAccount;
   }
 }
 
 /* =========================
-   INTERESSADOS CRUD
+   CRUD INTERESSADOS
 ========================= */
-function resolveLocalData() {
-  if (!igreja) {
-    throw new Error("Campo de local não encontrado.");
+function getSelectedResponsavel() {
+  const responsavelId = instrutor.value;
+  if (!responsavelId) {
+    throw new Error("Selecione o responsável.");
   }
 
-  if (igreja.tagName === "SELECT") {
-    const selectedId = igreja.value;
-    if (!selectedId) {
-      throw new Error("Selecione um local.");
-    }
+  const user = getUserById(responsavelId);
 
-    const local = getLocalById(selectedId);
-    if (!local) {
-      throw new Error("Local inválido.");
-    }
-
-    return {
-      localId: local.id,
-      localNome: local.nome,
-      localTipo: local.tipo || "igreja"
-    };
+  if (!user) {
+    throw new Error("Responsável inválido.");
   }
 
-  const raw = igreja.value.trim();
+  return user;
+}
 
-  if (!raw) {
-    throw new Error("Informe o local.");
+function getSelectedInteressadoLocal() {
+  const localId = igreja.value;
+  if (!localId) {
+    throw new Error("Selecione a igreja.");
   }
 
-  const local = state.locais.find((l) => normalizeText(l.nome) === normalizeText(raw));
+  const local = getLocalById(localId);
 
   if (!local) {
-    throw new Error("Selecione um local cadastrado válido.");
+    throw new Error("Igreja inválida.");
   }
 
-  return {
-    localId: local.id,
-    localNome: local.nome,
-    localTipo: local.tipo || "igreja"
-  };
-}
-
-function resolveInstrutoresData() {
-  if (!instrutor) {
-    throw new Error("Campo de instrutor não encontrado.");
-  }
-
-  let selectedIds = [];
-
-  if (instrutor.tagName === "SELECT" && instrutor.multiple) {
-    selectedIds = Array.from(instrutor.selectedOptions).map((option) => option.value).filter(Boolean);
-  } else if (instrutor.tagName === "SELECT") {
-    selectedIds = instrutor.value ? [instrutor.value] : [];
-  } else {
-    const typedNames = instrutor.value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    selectedIds = typedNames
-      .map((name) => state.instrutores.find((i) => normalizeText(i.nome) === normalizeText(name))?.id)
-      .filter(Boolean);
-  }
-
-  if (!selectedIds.length) {
-    throw new Error("Selecione pelo menos um instrutor.");
-  }
-
-  const selectedInstrutores = selectedIds
-    .map((id) => getInstrutorById(id))
-    .filter(Boolean);
-
-  if (!selectedInstrutores.length) {
-    throw new Error("Instrutor inválido.");
-  }
-
-  return {
-    instrutorIds: selectedInstrutores.map((item) => item.id),
-    instrutorNomes: selectedInstrutores.map((item) => item.nome)
-  };
+  return local;
 }
 
 async function handleInteressadoSubmit(event) {
@@ -1245,23 +1140,32 @@ async function handleInteressadoSubmit(event) {
       throw new Error("Informe o nome do interessado.");
     }
 
-    const localData = resolveLocalData();
-    const instrutoresData = resolveInstrutoresData();
+    const selectedLocal = getSelectedInteressadoLocal();
+    const selectedResponsavel = getSelectedResponsavel();
     const progress = calcProgress(estudoAtual.value, selectedSerie.totalEstudos);
+
+    if ((isLocal() || isMembro()) && selectedLocal.id !== getCurrentUserLocalId()) {
+      throw new Error("Você só pode cadastrar interessados na sua igreja.");
+    }
+
+    if (isMembro() && selectedResponsavel.id !== state.user.uid) {
+      throw new Error("Membro só pode registrar com ele mesmo como responsável.");
+    }
 
     const payload = {
       nome: nome.value.trim(),
       telefone: telefone.value.trim(),
       endereco: endereco.value.trim(),
-      localId: localData.localId,
-      localNome: localData.localNome,
-      localTipo: localData.localTipo,
-      igreja: localData.localNome, // compatibilidade visual antiga
+      igrejaId: selectedLocal.id,
+      igrejaNome: selectedLocal.nome,
+      igrejaTipo: selectedLocal.tipo || "igreja",
       distrito: DISTRITO_FIXO,
-      instrutorIds: instrutoresData.instrutorIds,
-      instrutorNomes: instrutoresData.instrutorNomes,
-      instrutorId: instrutoresData.instrutorIds[0] || "", // compatibilidade
-      instrutorNome: instrutoresData.instrutorNomes[0] || "", // compatibilidade
+      responsavelId: selectedResponsavel.id,
+      responsavelNome: selectedResponsavel.nome,
+      responsavelPerfil: selectedResponsavel.perfil,
+      criadoPorId: state.user.uid,
+      criadoPorNome: state.user.nome,
+      criadoPorPerfil: state.user.perfil,
       serieId: selectedSerie.id,
       serieNome: selectedSerie.nome,
       estudoAtual: progress.capped,
@@ -1280,27 +1184,22 @@ async function handleInteressadoSubmit(event) {
 
     if (recordId) {
       const existing = state.interessados.find((item) => item.id === recordId);
+
       if (!existing) {
         throw new Error("Registro não encontrado.");
       }
 
-      if (!isAdmin()) {
-        const localId = getCurrentUserLocalId();
-        const localNome = normalizeText(getCurrentUserLocalName());
+      if (isMembro() && existing.criadoPorId !== state.user.uid) {
+        throw new Error("Você não pode editar registro de outro usuário.");
+      }
 
-        const sameLocal = localId
-          ? existing.localId === localId
-          : normalizeText(existing.localNome || existing.igreja) === localNome;
-
-        if (!sameLocal) {
-          throw new Error("Você não pode editar um registro de outro local.");
-        }
+      if (isLocal() && existing.igrejaId !== getCurrentUserLocalId()) {
+        throw new Error("Você não pode editar registro de outra igreja.");
       }
 
       await updateDoc(doc(db, "interessados", recordId), payload);
       showMessage("Interessado atualizado com sucesso.", "success");
     } else {
-      payload.criadoPor = state.user.uid;
       payload.criadoEm = new Date().toISOString();
       payload.createdAt = serverTimestamp();
 
@@ -1323,18 +1222,14 @@ async function editInteressado(id) {
   const item = state.interessados.find((row) => row.id === id);
   if (!item) return;
 
-  if (!isAdmin()) {
-    const localId = getCurrentUserLocalId();
-    const localNome = normalizeText(getCurrentUserLocalName());
+  if (isMembro() && item.criadoPorId !== state.user.uid) {
+    showMessage("Você não pode editar esse registro.", "error");
+    return;
+  }
 
-    const sameLocal = localId
-      ? item.localId === localId
-      : normalizeText(item.localNome || item.igreja) === localNome;
-
-    if (!sameLocal) {
-      showMessage("Você não pode editar esse registro.", "error");
-      return;
-    }
+  if (isLocal() && item.igrejaId !== getCurrentUserLocalId()) {
+    showMessage("Você não pode editar registro de outra igreja.", "error");
+    return;
   }
 
   fillInteressadoForm(item);
@@ -1345,18 +1240,14 @@ async function deleteInteressado(id) {
   const item = state.interessados.find((row) => row.id === id);
   if (!item) return;
 
-  if (!isAdmin()) {
-    const localId = getCurrentUserLocalId();
-    const localNome = normalizeText(getCurrentUserLocalName());
+  if (isMembro() && item.criadoPorId !== state.user.uid) {
+    showMessage("Você não pode excluir esse registro.", "error");
+    return;
+  }
 
-    const sameLocal = localId
-      ? item.localId === localId
-      : normalizeText(item.localNome || item.igreja) === localNome;
-
-    if (!sameLocal) {
-      showMessage("Você não pode excluir esse registro.", "error");
-      return;
-    }
+  if (isLocal() && item.igrejaId !== getCurrentUserLocalId()) {
+    showMessage("Você não pode excluir registro de outra igreja.", "error");
+    return;
   }
 
   const confirmed = window.confirm(`Excluir o registro de "${item.nome}"?`);
@@ -1376,7 +1267,7 @@ async function deleteInteressado(id) {
 }
 
 /* =========================
-   SÉRIES CRUD
+   CRUD SERIES
 ========================= */
 async function handleSerieSubmit(event) {
   event.preventDefault();
@@ -1420,7 +1311,7 @@ async function handleSerieSubmit(event) {
       updatedAt: serverTimestamp()
     });
 
-    serieForm?.reset();
+    serieForm.reset();
     showMessage("Série criada com sucesso.", "success");
     await refreshData();
   } catch (error) {
@@ -1485,9 +1376,9 @@ async function editSerie(id) {
         await updateDoc(doc(db, "interessados", item.id), {
           serieNome: nomeFinal,
           totalEstudos: totalFinal,
+          estudoAtual: progress.capped,
           porcentagem: progress.porcentagem,
           faltantes: progress.faltantes,
-          estudoAtual: progress.capped,
           atualizadoEm: new Date().toISOString(),
           updatedAt: serverTimestamp()
         });
@@ -1536,7 +1427,7 @@ async function deleteSerie(id) {
 }
 
 /* =========================
-   LOCAIS CRUD
+   CRUD LOCAIS
 ========================= */
 async function handleLocalFormSubmit(event) {
   event.preventDefault();
@@ -1548,8 +1439,8 @@ async function handleLocalFormSubmit(event) {
   }
 
   try {
-    const nomeValue = novoLocalNome?.value.trim();
-    const tipoValue = (novoLocalTipo?.value || "igreja").trim();
+    const nomeValue = novoLocalNome.value.trim();
+    const tipoValue = novoLocalTipo.value;
 
     if (!nomeValue) {
       throw new Error("Informe o nome do local.");
@@ -1577,7 +1468,7 @@ async function handleLocalFormSubmit(event) {
       updatedAt: serverTimestamp()
     });
 
-    localForm?.reset();
+    localForm.reset();
     showMessage("Local criado com sucesso.", "success");
     await refreshData();
   } catch (error) {
@@ -1631,36 +1522,25 @@ async function editLocal(id) {
       updatedAt: serverTimestamp()
     });
 
-    // atualização em cascata: interessados, instrutores, usuários
     await Promise.all([
-      ...state.interessados
-        .filter((item) => item.localId === id)
-        .map((item) =>
-          updateDoc(doc(db, "interessados", item.id), {
-            localNome: nomeFinal,
-            localTipo: tipoFinal,
-            igreja: nomeFinal,
-            distrito: DISTRITO_FIXO,
-            atualizadoEm: new Date().toISOString(),
-            updatedAt: serverTimestamp()
-          })
-        ),
-      ...state.instrutores
-        .filter((item) => item.localId === id)
-        .map((item) =>
-          updateDoc(doc(db, "instrutores", item.id), {
-            localNome: nomeFinal,
-            distrito: DISTRITO_FIXO,
-            atualizadoEm: new Date().toISOString(),
-            updatedAt: serverTimestamp()
-          })
-        ),
       ...state.usuarios
-        .filter((item) => item.localId === id)
-        .map((item) =>
-          updateDoc(doc(db, "usuarios", item.id), {
+        .filter((u) => u.igrejaId === id)
+        .map((u) =>
+          updateDoc(doc(db, "usuarios", u.id), {
+            igrejaNome: nomeFinal,
             localNome: nomeFinal,
             igreja: nomeFinal,
+            distrito: DISTRITO_FIXO,
+            atualizadoEm: new Date().toISOString(),
+            updatedAt: serverTimestamp()
+          })
+        ),
+      ...state.interessados
+        .filter((i) => i.igrejaId === id)
+        .map((i) =>
+          updateDoc(doc(db, "interessados", i.id), {
+            igrejaNome: nomeFinal,
+            igrejaTipo: tipoFinal,
             distrito: DISTRITO_FIXO,
             atualizadoEm: new Date().toISOString(),
             updatedAt: serverTimestamp()
@@ -1688,12 +1568,11 @@ async function deleteLocal(id) {
   if (!local) return;
 
   const inUse =
-    state.interessados.some((item) => item.localId === id) ||
-    state.instrutores.some((item) => item.localId === id) ||
-    state.usuarios.some((item) => item.localId === id);
+    state.usuarios.some((u) => u.igrejaId === id) ||
+    state.interessados.some((i) => i.igrejaId === id);
 
   if (inUse) {
-    showMessage("Esse local está vinculado a usuários, instrutores ou interessados.", "error");
+    showMessage("Esse local está vinculado a usuários ou interessados.", "error");
     return;
   }
 
@@ -1714,195 +1593,17 @@ async function deleteLocal(id) {
 }
 
 /* =========================
-   INSTRUTORES CRUD
+   CRUD USUARIOS
 ========================= */
-async function handleInstrutorFormSubmit(event) {
-  event.preventDefault();
-  clearMessage();
+function validateUserCreationByRole(profile) {
+  const allowed = getAllowedProfilesToCreate();
 
-  if (!canManageInstrutores()) {
-    showMessage("Sem permissão para cadastrar instrutores.", "error");
-    return;
-  }
-
-  try {
-    const nomeValue = novoInstrutorNome?.value.trim();
-    const localId = novoInstrutorLocal?.value || getCurrentUserLocalId();
-
-    if (!nomeValue) {
-      throw new Error("Informe o nome do instrutor.");
-    }
-
-    if (!localId) {
-      throw new Error("Selecione o local do instrutor.");
-    }
-
-    const local = getLocalById(localId);
-    if (!local) {
-      throw new Error("Local inválido.");
-    }
-
-    const duplicate = state.instrutores.find(
-      (item) =>
-        normalizeText(item.nome) === normalizeText(nomeValue) &&
-        item.localId === localId
-    );
-
-    if (duplicate) {
-      throw new Error("Já existe um instrutor com esse nome nesse local.");
-    }
-
-    showLoading();
-
-    await addDoc(collection(db, "instrutores"), {
-      nome: nomeValue,
-      localId: local.id,
-      localNome: local.nome,
-      distrito: DISTRITO_FIXO,
-      ativo: true,
-      criadoPor: state.user.uid,
-      criadoEm: new Date().toISOString(),
-      atualizadoEm: new Date().toISOString(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-
-    instrutorForm?.reset();
-    showMessage("Instrutor cadastrado com sucesso.", "success");
-    await refreshData();
-  } catch (error) {
-    console.error("Erro ao criar instrutor:", error);
-    showMessage(error.message || "Não foi possível criar o instrutor.", "error");
-  } finally {
-    hideLoading();
+  if (!allowed.includes(profile)) {
+    throw new Error("Você não pode criar esse tipo de usuário.");
   }
 }
 
-async function editInstrutor(id) {
-  if (!canManageInstrutores()) {
-    showMessage("Sem permissão para editar instrutores.", "error");
-    return;
-  }
-
-  const item = getInstrutorById(id);
-  if (!item) return;
-
-  if (isLider() && !isAdmin()) {
-    const localId = getCurrentUserLocalId();
-    const localNome = normalizeText(getCurrentUserLocalName());
-
-    const sameLocal = localId
-      ? item.localId === localId
-      : normalizeText(item.localNome) === localNome;
-
-    if (!sameLocal) {
-      showMessage("Você não pode editar instrutor de outro local.", "error");
-      return;
-    }
-  }
-
-  const novoNome = window.prompt("Editar nome do instrutor:", item.nome);
-  if (novoNome === null) return;
-
-  const nomeFinal = novoNome.trim();
-  if (!nomeFinal) {
-    showMessage("O nome do instrutor não pode ficar vazio.", "error");
-    return;
-  }
-
-  try {
-    showLoading();
-
-    await updateDoc(doc(db, "instrutores", id), {
-      nome: nomeFinal,
-      atualizadoEm: new Date().toISOString(),
-      updatedAt: serverTimestamp()
-    });
-
-    // atualizar interessados que usam esse instrutor
-    const impacted = state.interessados.filter((interessado) =>
-      ensureArray(interessado.instrutorIds).includes(id)
-    );
-
-    await Promise.all(
-      impacted.map(async (interessado) => {
-        const nomesAtualizados = ensureArray(interessado.instrutorIds)
-          .map((instrutorId) => {
-            if (instrutorId === id) return nomeFinal;
-            return getInstrutorById(instrutorId)?.nome || nomeFinal;
-          });
-
-        await updateDoc(doc(db, "interessados", interessado.id), {
-          instrutorNomes: nomesAtualizados,
-          instrutorNome: nomesAtualizados[0] || "",
-          atualizadoEm: new Date().toISOString(),
-          updatedAt: serverTimestamp()
-        });
-      })
-    );
-
-    showMessage("Instrutor atualizado com sucesso.", "success");
-    await refreshData();
-  } catch (error) {
-    console.error("Erro ao editar instrutor:", error);
-    showMessage("Não foi possível editar o instrutor.", "error");
-  } finally {
-    hideLoading();
-  }
-}
-
-async function deleteInstrutor(id) {
-  if (!canManageInstrutores()) {
-    showMessage("Sem permissão para excluir instrutores.", "error");
-    return;
-  }
-
-  const item = getInstrutorById(id);
-  if (!item) return;
-
-  if (isLider() && !isAdmin()) {
-    const localId = getCurrentUserLocalId();
-    const localNome = normalizeText(getCurrentUserLocalName());
-
-    const sameLocal = localId
-      ? item.localId === localId
-      : normalizeText(item.localNome) === localNome;
-
-    if (!sameLocal) {
-      showMessage("Você não pode excluir instrutor de outro local.", "error");
-      return;
-    }
-  }
-
-  const inUse = state.interessados.some((interessado) =>
-    ensureArray(interessado.instrutorIds).includes(id)
-  );
-
-  if (inUse) {
-    showMessage("Esse instrutor está vinculado a interessados.", "error");
-    return;
-  }
-
-  const confirmed = window.confirm(`Excluir o instrutor "${item.nome}"?`);
-  if (!confirmed) return;
-
-  try {
-    showLoading();
-    await deleteDoc(doc(db, "instrutores", id));
-    showMessage("Instrutor excluído com sucesso.", "success");
-    await refreshData();
-  } catch (error) {
-    console.error("Erro ao excluir instrutor:", error);
-    showMessage("Não foi possível excluir o instrutor.", "error");
-  } finally {
-    hideLoading();
-  }
-}
-
-/* =========================
-   USUÁRIOS
-========================= */
-async function createUserWithSecondaryApp({ nome, email, senha, perfil, localId }) {
+async function createGlobalUserWithSecondaryApp({ nome, email, senha, perfil }) {
   const secondaryName = `secondary-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const secondaryApp = initializeApp(app.options, secondaryName);
   const secondaryAuth = getAuth(secondaryApp);
@@ -1915,15 +1616,16 @@ async function createUserWithSecondaryApp({ nome, email, senha, perfil, localId 
     );
 
     const uid = credential.user.uid;
-    const local = localId ? getLocalById(localId) : null;
 
     await setDoc(doc(db, "usuarios", uid), {
       nome,
       email,
+      emailAuth: email,
       perfil,
-      localId: local?.id || "",
-      localNome: local?.nome || "",
-      igreja: local?.nome || "",
+      username: "",
+      senhaLocal: "",
+      igrejaId: "",
+      igrejaNome: "",
       distrito: DISTRITO_FIXO,
       ativo: true,
       criadoPor: state.user.uid,
@@ -1948,120 +1650,163 @@ async function createUserWithSecondaryApp({ nome, email, senha, perfil, localId 
   }
 }
 
-function mapUserCreationError(error) {
-  const code = error?.code || "";
+async function createLocalOrMembroUserWithSecondaryApp({
+  nome,
+  perfil,
+  igrejaId,
+  igrejaNome,
+  username,
+  senha
+}) {
+  const secondaryName = `secondary-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const secondaryApp = initializeApp(app.options, secondaryName);
+  const secondaryAuth = getAuth(secondaryApp);
 
-  switch (code) {
-    case "auth/email-already-in-use":
-      return "Esse e-mail já está em uso.";
-    case "auth/invalid-email":
-      return "E-mail inválido.";
-    case "auth/weak-password":
-      return "A senha precisa ter pelo menos 6 caracteres.";
-    default:
-      return error?.message || "Não foi possível criar o usuário.";
+  const emailAuth = buildEmailAuth(username, igrejaId);
+
+  try {
+    const credential = await createUserWithEmailAndPassword(
+      secondaryAuth,
+      emailAuth,
+      senha
+    );
+
+    const uid = credential.user.uid;
+
+    await setDoc(doc(db, "usuarios", uid), {
+      nome,
+      email: "",
+      emailAuth,
+      perfil,
+      username,
+      senhaLocal: "",
+      igrejaId,
+      igrejaNome,
+      distrito: DISTRITO_FIXO,
+      ativo: true,
+      criadoPor: state.user.uid,
+      criadoEm: new Date().toISOString(),
+      atualizadoEm: new Date().toISOString(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    await signOut(secondaryAuth);
+    await deleteApp(secondaryApp);
+
+    return uid;
+  } catch (error) {
+    try {
+      await signOut(secondaryAuth);
+    } catch (_) {}
+    try {
+      await deleteApp(secondaryApp);
+    } catch (_) {}
+    throw error;
   }
+}
+
+async function ensureUniqueUsernameInChurch(username, igrejaId) {
+  const q = query(
+    collection(db, "usuarios"),
+    where("username", "==", username),
+    where("igrejaId", "==", igrejaId),
+    limit(1)
+  );
+
+  const snap = await getDocs(q);
+  return snap.empty;
 }
 
 async function handleUserFormSubmit(event) {
   event.preventDefault();
   clearMessage();
 
-  if (!canManageUsers()) {
-    showMessage("Apenas administradores podem criar usuários.", "error");
+  if (!canCreateUsers()) {
+    showMessage("Você não pode criar usuários.", "error");
     return;
   }
 
-  const nomeValue = novoUsuarioNome?.value.trim();
-  const emailValue = novoUsuarioEmail?.value.trim();
-  const senhaValue = novoUsuarioSenha?.value;
-  const perfilValue = novoUsuarioPerfil?.value;
-
-  let localId = "";
-  if (novoUsuarioIgreja) {
-    if (novoUsuarioIgreja.tagName === "SELECT") {
-      localId = novoUsuarioIgreja.value;
-    } else {
-      const found = state.locais.find(
-        (item) => normalizeText(item.nome) === normalizeText(novoUsuarioIgreja.value)
-      );
-      localId = found?.id || "";
-    }
-  }
-
-  if (!nomeValue || !emailValue || !senhaValue) {
-    showMessage("Preencha nome, e-mail e senha.", "error");
-    return;
-  }
-
-  if (!["admin", "lider"].includes(perfilValue)) {
-    showMessage("Perfil inválido. Use admin ou lider.", "error");
-    return;
-  }
-
-  if (perfilValue === "lider" && !localId) {
-    showMessage("Selecione o local do líder.", "error");
-    return;
-  }
+  const nomeValue = novoUsuarioNome.value.trim();
+  const perfilValue = novoUsuarioPerfil.value;
 
   try {
+    validateUserCreationByRole(perfilValue);
+
+    if (!nomeValue) {
+      throw new Error("Informe o nome do usuário.");
+    }
+
     showLoading();
 
-    await createUserWithSecondaryApp({
+    if (perfilValue === "admin" || perfilValue === "distrital") {
+      const emailValue = novoUsuarioEmail.value.trim();
+      const senhaValue = novoUsuarioSenha.value;
+
+      if (!emailValue || !senhaValue) {
+        throw new Error("Preencha e-mail e senha.");
+      }
+
+      await createGlobalUserWithSecondaryApp({
+        nome: nomeValue,
+        email: emailValue,
+        senha: senhaValue,
+        perfil: perfilValue
+      });
+
+      userForm.reset();
+      renderUserProfileOptions();
+      showMessage("Usuário global criado com sucesso.", "success");
+      await refreshData();
+      return;
+    }
+
+    const igrejaIdValue = novoUsuarioIgreja.value;
+    const usernameValue = normalizeText(novoUsuarioUsername.value);
+    const senhaLocalValue = novoUsuarioSenhaLocal.value;
+
+    if (!igrejaIdValue) {
+      throw new Error("Selecione a igreja.");
+    }
+
+    if (!usernameValue) {
+      throw new Error("Informe o usuário.");
+    }
+
+    if (!senhaLocalValue) {
+      throw new Error("Informe a senha.");
+    }
+
+    const local = getLocalById(igrejaIdValue);
+    if (!local) {
+      throw new Error("Igreja inválida.");
+    }
+
+    if (isLocal() && igrejaIdValue !== getCurrentUserLocalId()) {
+      throw new Error("Você só pode criar usuários da sua igreja.");
+    }
+
+    const usernameIsFree = await ensureUniqueUsernameInChurch(usernameValue, igrejaIdValue);
+    if (!usernameIsFree) {
+      throw new Error("Esse usuário já existe nessa igreja.");
+    }
+
+    await createLocalOrMembroUserWithSecondaryApp({
       nome: nomeValue,
-      email: emailValue,
-      senha: senhaValue,
       perfil: perfilValue,
-      localId
+      igrejaId: local.id,
+      igrejaNome: local.nome,
+      username: usernameValue,
+      senha: senhaLocalValue
     });
 
-    userForm?.reset();
+    userForm.reset();
+    renderUserProfileOptions();
     showMessage("Usuário criado com sucesso.", "success");
     await refreshData();
   } catch (error) {
     console.error("Erro ao criar usuário:", error);
-    showMessage(mapUserCreationError(error), "error");
-  } finally {
-    hideLoading();
-  }
-}
-
-/* =========================
-   HELPERS ADMIN
-========================= */
-async function initializeDefaultLocais() {
-  if (!isAdmin()) {
-    showMessage("Apenas administradores podem inicializar locais.", "error");
-    return;
-  }
-
-  try {
-    showLoading();
-
-    const existingMap = new Set(state.locais.map((item) => normalizeText(item.nome)));
-    const missing = DEFAULT_LOCAIS.filter((item) => !existingMap.has(normalizeText(item.nome)));
-
-    await Promise.all(
-      missing.map((item) =>
-        addDoc(collection(db, "locais"), {
-          nome: item.nome,
-          tipo: item.tipo,
-          distrito: DISTRITO_FIXO,
-          ativo: true,
-          criadoPor: state.user.uid,
-          criadoEm: new Date().toISOString(),
-          atualizadoEm: new Date().toISOString(),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        })
-      )
-    );
-
-    showMessage("Locais padrão inicializados com sucesso.", "success");
-    await refreshData();
-  } catch (error) {
-    console.error("Erro ao inicializar locais:", error);
-    showMessage("Não foi possível inicializar os locais padrão.", "error");
+    showMessage(error.message || "Não foi possível criar o usuário.", "error");
   } finally {
     hideLoading();
   }
@@ -2074,12 +1819,6 @@ function bindStaticEvents() {
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const targetSection = btn.dataset.section;
-
-      if (targetSection === "catalogoSection" && !canManageSeries()) return;
-      if (targetSection === "usuariosSection" && !canManageUsers()) return;
-      if (targetSection === "locaisSection" && !canManageLocais()) return;
-      if (targetSection === "instrutoresSection" && !canManageInstrutores()) return;
-
       setSection(targetSection);
     });
   });
@@ -2106,9 +1845,8 @@ function bindStaticEvents() {
   resetFormBtn?.addEventListener("click", resetInteressadoForm);
 
   serieForm?.addEventListener("submit", handleSerieSubmit);
-  userForm?.addEventListener("submit", handleUserFormSubmit);
   localForm?.addEventListener("submit", handleLocalFormSubmit);
-  instrutorForm?.addEventListener("submit", handleInstrutorFormSubmit);
+  userForm?.addEventListener("submit", handleUserFormSubmit);
 
   serieId?.addEventListener("change", updateProgressPreview);
   estudoAtual?.addEventListener("input", updateProgressPreview);
@@ -2168,18 +1906,7 @@ function bindStaticEvents() {
     }
   });
 
-  instrutoresList?.addEventListener("click", async (event) => {
-    const editBtn = event.target.closest("[data-edit-instrutor]");
-    const deleteBtn = event.target.closest("[data-delete-instrutor]");
-
-    if (editBtn) {
-      await editInstrutor(editBtn.dataset.editInstrutor);
-    }
-
-    if (deleteBtn) {
-      await deleteInstrutor(deleteBtn.dataset.deleteInstrutor);
-    }
-  });
+  novoUsuarioPerfil?.addEventListener("change", updateUserFormByProfile);
 }
 
 /* =========================
@@ -2190,41 +1917,63 @@ window.addEventListener("auth-ready", async (event) => {
 
   if (!detail?.ready) return;
 
-  if (!detail?.firebaseUser || !detail?.profile) {
+  if (!detail?.profile) {
     state.user = null;
     state.interessados = [];
     state.series = [];
     state.usuarios = [];
     state.locais = [];
-    state.instrutores = [];
     return;
   }
 
   state.user = {
-    uid: detail.firebaseUser.uid,
+    uid: detail.profile.uid || detail.profile.id || detail.firebaseUser?.uid || "",
     ...detail.profile
   };
 
-  const allowedPerfis = ["admin", "lider"];
+  const allowedPerfis = ["admin", "distrital", "local", "membro"];
   if (!allowedPerfis.includes(state.user.perfil)) {
     showMessage("Perfil sem acesso ao sistema.", "error");
     return;
   }
 
-  if (!isAdmin()) {
-    document.querySelectorAll(".admin-only").forEach((el) => {
-      el.style.display = "none";
-    });
-
-    if (
-      ["catalogoSection", "usuariosSection", "locaisSection"].includes(state.activeSection)
-    ) {
-      setSection("dashboardSection");
-    }
-  }
-
+  applyRoleUI();
   await refreshData();
 });
+
+/* =========================
+   RENDER FINAL
+========================= */
+function renderAll() {
+  renderFilters();
+  renderSerieOptions();
+  renderInteressadoLocalOptions();
+  renderResponsavelOptions();
+  renderStatusAndInterestOptions();
+  renderUserProfileOptions();
+  renderUserLocalOptions();
+  updateProgressPreview();
+
+  if (novoUsuarioDistrito) {
+    novoUsuarioDistrito.value = DISTRITO_FIXO;
+    novoUsuarioDistrito.readOnly = true;
+  }
+
+  if (distrito) {
+    distrito.value = DISTRITO_FIXO;
+    distrito.readOnly = true;
+  }
+
+  renderMetrics();
+  renderRecentList();
+  renderAttentionList();
+  renderInteressadosTable();
+  renderSeriesList();
+  renderUsuariosList();
+  renderLocaisList();
+
+  applyRoleUI();
+}
 
 /* =========================
    START
@@ -2236,7 +1985,7 @@ renderSerieOptions();
 updateProgressPreview();
 
 /* =========================
-   DEBUG GLOBAL
+   DEBUG
 ========================= */
 window.esplanadaApp = {
   state,
@@ -2246,8 +1995,5 @@ window.esplanadaApp = {
   editSerie,
   deleteSerie,
   editLocal,
-  deleteLocal,
-  editInstrutor,
-  deleteInstrutor,
-  initializeDefaultLocais
+  deleteLocal
 };
