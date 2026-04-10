@@ -18,6 +18,9 @@ import {
 
 import { auth, db } from "./firebase-config.js";
 
+/* =========================
+   ELEMENTOS
+========================= */
 const loginForm = document.getElementById("loginForm");
 
 const loginAccessType = document.getElementById("loginAccessType");
@@ -42,6 +45,9 @@ const loggedUserName = document.getElementById("loggedUserName");
 const loggedUserRole = document.getElementById("loggedUserRole");
 const userAvatar = document.getElementById("userAvatar");
 
+/* =========================
+   STORE
+========================= */
 const authStore = {
   firebaseUser: null,
   profile: null,
@@ -206,7 +212,7 @@ function mapFirebaseAuthError(error) {
 }
 
 /* =========================
-   DATA LOAD
+   LOAD LOCAIS PARA LOGIN
 ========================= */
 async function loadLoginLocais() {
   if (!loginLocal) return;
@@ -220,17 +226,19 @@ async function loadLoginLocais() {
 
     loginLocal.innerHTML =
       `<option value="">Selecionar igreja</option>` +
-      locais.map((item) => {
-        const label = `${item.nome}${item.tipo ? ` (${item.tipo})` : ""}`;
-        return `<option value="${item.id}">${label}</option>`;
-      }).join("");
+      locais
+        .map((item) => {
+          const label = `${item.nome}${item.tipo ? ` (${item.tipo})` : ""}`;
+          return `<option value="${item.id}">${label}</option>`;
+        })
+        .join("");
   } catch (error) {
     console.error("Erro ao carregar locais no login:", error);
   }
 }
 
 /* =========================
-   PERFIL
+   PERFIL DO USUÁRIO
 ========================= */
 async function fetchUserProfile(uid) {
   const ref = doc(db, "usuarios", uid);
@@ -253,9 +261,12 @@ async function fetchUserProfile(uid) {
   };
 }
 
-async function fetchUserByUsernameAndChurch({ perfil, username, igrejaId }) {
+/* =========================
+   LOGIN INDEX
+========================= */
+async function fetchLoginIndexRecord({ perfil, username, igrejaId }) {
   const q = query(
-    collection(db, "usuarios"),
+    collection(db, "login_index"),
     where("perfil", "==", perfil),
     where("username", "==", username),
     where("igrejaId", "==", igrejaId),
@@ -269,22 +280,21 @@ async function fetchUserByUsernameAndChurch({ perfil, username, igrejaId }) {
     throw new Error("Usuário não encontrado para essa igreja.");
   }
 
-  const userDoc = snap.docs[0];
-  const data = userDoc.data();
+  const docSnap = snap.docs[0];
+  const data = docSnap.data();
 
   if (!data.emailAuth) {
-    throw new Error("Esse usuário não possui credencial de acesso configurada.");
+    throw new Error("Esse acesso não possui credencial válida.");
   }
 
   return {
-    uid: userDoc.id,
-    id: userDoc.id,
+    id: docSnap.id,
     ...data
   };
 }
 
 /* =========================
-   LOGIN
+   LOGIN GLOBAL
 ========================= */
 async function handleGlobalLogin({ accessType, email, password }) {
   if (!email || !password) {
@@ -307,6 +317,9 @@ async function handleGlobalLogin({ accessType, email, password }) {
   dispatchAuthReady();
 }
 
+/* =========================
+   LOGIN LOCAL / MEMBRO
+========================= */
 async function handleLocalLogin({ accessType, igrejaId, username, password }) {
   if (!igrejaId) {
     throw new Error("Selecione a igreja.");
@@ -322,7 +335,7 @@ async function handleLocalLogin({ accessType, igrejaId, username, password }) {
 
   await setPersistence(auth, browserLocalPersistence);
 
-  const profileByQuery = await fetchUserByUsernameAndChurch({
+  const loginRecord = await fetchLoginIndexRecord({
     perfil: accessType,
     username: normalizeText(username),
     igrejaId
@@ -330,7 +343,7 @@ async function handleLocalLogin({ accessType, igrejaId, username, password }) {
 
   const credential = await signInWithEmailAndPassword(
     auth,
-    profileByQuery.emailAuth,
+    loginRecord.emailAuth,
     password
   );
 
@@ -346,12 +359,20 @@ async function handleLocalLogin({ accessType, igrejaId, username, password }) {
     throw new Error("Esse usuário não pertence à igreja selecionada.");
   }
 
+  if (normalizeText(profile.username || "") !== normalizeText(username)) {
+    await signOut(auth).catch(() => {});
+    throw new Error("Usuário inválido.");
+  }
+
   setAuthStore(credential.user, profile);
   applyUserUI(profile);
   showAppScreen();
   dispatchAuthReady();
 }
 
+/* =========================
+   SUBMIT LOGIN
+========================= */
 async function handleLogin(event) {
   event.preventDefault();
   hideMessage(authMessage);
@@ -383,10 +404,12 @@ async function handleLogin(event) {
     );
   } catch (error) {
     console.error("Erro no login:", error);
+
     clearAuthStore();
     showAuthScreen();
 
-    const message = isGlobalAccessType(accessType)
+    const accessTypeNow = loginAccessType?.value || "admin";
+    const message = isGlobalAccessType(accessTypeNow)
       ? mapFirebaseAuthError(error)
       : (error?.message || "Não foi possível entrar.");
 
@@ -422,7 +445,7 @@ async function handleLogout() {
 }
 
 /* =========================
-   BOOTSTRAP
+   BOOTSTRAP AUTH
 ========================= */
 function bootstrapAuth() {
   showLoading();
