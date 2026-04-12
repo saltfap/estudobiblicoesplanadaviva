@@ -47,7 +47,8 @@ const statusOptions = [
   "Desinteressado",
   "Concluído",
   "Pronto para apelo",
-  "Pronto para batismo"
+  "Pronto para batismo",
+  "Batismo Realizado"
 ];
 
 const interestOptions = ["Todos", "Alto", "Médio", "Baixo"];
@@ -221,6 +222,52 @@ function formatRole(role = "") {
   }
 }
 
+function getInstrutoresFromForm() {
+  if (!instrutor) return [];
+
+  const selectedOptions = Array.from(instrutor.selectedOptions || []);
+  const ids = selectedOptions.map((option) => option.value).filter(Boolean);
+
+  const users = ids
+    .map((id) => getUserById(id))
+    .filter(Boolean)
+    .map((user) => ({
+      id: user.id,
+      nome: user.nome,
+      perfil: user.perfil
+    }));
+
+  return users;
+}
+
+function getInstrutorNames(item) {
+  if (Array.isArray(item.instrutorNomes) && item.instrutorNomes.length) {
+    return item.instrutorNomes;
+  }
+
+  if (item.responsavelNome) {
+    return [item.responsavelNome];
+  }
+
+  return [];
+}
+
+function getInstrutorNamesText(item) {
+  const names = getInstrutorNames(item);
+  return names.length ? names.join(", ") : "-";
+}
+
+function userCanManageInteressado(item) {
+  if (isAdmin() || isDistrital()) return true;
+  if (isLocal()) return item.igrejaId === getCurrentUserLocalId();
+  if (isMembro()) return item.criadoPorId === state.user.uid;
+  return false;
+}
+
+function canAddStudyToInteressado(item) {
+  return userCanManageInteressado(item) && Number(item.estudoAtual || 0) < Number(item.totalEstudos || 0);
+}
+
 function calcProgress(estudoAtualValue, totalEstudosValue) {
   const atual = Math.max(0, Number(estudoAtualValue || 0));
   const total = Math.max(1, Number(totalEstudosValue || 1));
@@ -248,7 +295,11 @@ function isAtRisk(item) {
 }
 
 function isDecision(item) {
-  return item.status === "Pronto para apelo" || item.status === "Pronto para batismo";
+  return (
+    item.status === "Pronto para apelo" ||
+    item.status === "Pronto para batismo" ||
+    item.status === "Batismo Realizado"
+  );
 }
 
 /* =========================
@@ -294,13 +345,14 @@ function getAverageProgressValue(data = []) {
 
 function getSpiritualReadinessValue(statusText = "") {
   const map = {
-    "Desinteressado": 10,
-    "Pausado": 30,
-    "Ativo": 55,
-    "Concluído": 75,
-    "Pronto para apelo": 90,
-    "Pronto para batismo": 100
-  };
+  "Desinteressado": 10,
+  "Pausado": 30,
+  "Ativo": 55,
+  "Concluído": 75,
+  "Pronto para apelo": 90,
+  "Pronto para batismo": 100,
+  "Batismo Realizado": 100
+};
 
   return map[statusText] ?? 0;
 }
@@ -687,12 +739,13 @@ function getFilteredInteressados() {
 
   if (search) {
     data = data.filter((item) => {
+      const instrutoresText = getInstrutorNamesText(item);
+
       return (
         normalizeText(item.nome).includes(search) ||
         normalizeText(item.telefone).includes(search) ||
         normalizeText(item.igrejaNome || "").includes(search) ||
-        normalizeText(item.responsavelNome || "").includes(search) ||
-        normalizeText(item.criadoPorNome || "").includes(search) ||
+        normalizeText(instrutoresText).includes(search) ||
         normalizeText(item.serieNome || "").includes(search)
       );
     });
@@ -825,26 +878,30 @@ function getResponsibleUsersForCurrentContext() {
   return [];
 }
 
-function renderResponsavelOptions(selectedId = "") {
+function renderResponsavelOptions(selectedIds = []) {
   if (!instrutor) return;
 
   const users = getResponsibleUsersForCurrentContext();
 
-  instrutor.innerHTML =
-    `<option value="">Selecionar responsável</option>` +
-    users.map((u) => `<option value="${u.id}">${escapeHtml(u.nome)}</option>`).join("");
+  instrutor.innerHTML = users
+    .map((u) => `<option value="${u.id}">${escapeHtml(u.nome)}</option>`)
+    .join("");
+
+  instrutor.multiple = true;
+  instrutor.disabled = false;
 
   if (isMembro()) {
-    instrutor.value = state.user?.uid || "";
+    Array.from(instrutor.options).forEach((option) => {
+      option.selected = option.value === state.user?.uid;
+    });
     instrutor.disabled = true;
     return;
   }
 
-  instrutor.disabled = false;
-
-  if (selectedId) {
-    instrutor.value = selectedId;
-  }
+  const safeIds = Array.isArray(selectedIds) ? selectedIds : [];
+  Array.from(instrutor.options).forEach((option) => {
+    option.selected = safeIds.includes(option.value);
+  });
 }
 
 function updateProgressPreview() {
@@ -907,7 +964,7 @@ function fillInteressadoForm(item) {
     igreja.value = item.igrejaId || "";
   }
 
-  renderResponsavelOptions(item.responsavelId || "");
+  renderResponsavelOptions(item.instrutorIds || []);
   renderSerieOptions();
   serieId.value = item.serieId || "";
 
@@ -950,10 +1007,12 @@ function renderMetrics() {
       className: "metric-card soft-yellow"
     },
     {
-      label: "Concluídos",
-      value: data.filter((item) => item.status === "Concluído").length,
-      className: "metric-card soft-green"
-    },
+  label: "Concluídos",
+  value: data.filter((item) =>
+    item.status === "Concluído" || item.status === "Batismo Realizado"
+  ).length,
+  className: "metric-card soft-green"
+},
     {
       label: "Prontos para decisão",
       value: data.filter(isDecision).length,
@@ -982,28 +1041,28 @@ function renderRecentList() {
   }
 
   recentList.innerHTML = data
-    .map((item) => {
-      const p = calcProgress(item.estudoAtual, item.totalEstudos);
+  .map((item) => {
+    const p = calcProgress(item.estudoAtual, item.totalEstudos);
 
-      return `
-        <article class="stack-item">
-          <div class="stack-item-top">
-            <h4>${escapeHtml(item.nome)}</h4>
-            <span class="tiny-muted">${escapeHtml(item.responsavelNome || "-")}</span>
-          </div>
-          <p class="stack-item-sub">
-            ${escapeHtml(item.igrejaNome || "Sem igreja")} • ${escapeHtml(item.serieNome || "Sem série")}
-          </p>
-          <div class="progress-meta">
-            ${p.capped} de ${p.total} • ${p.porcentagem}% • faltam ${p.faltantes}
-          </div>
-          <div class="progress-bar">
-            <span style="width:${p.porcentagem}%"></span>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+    return `
+      <article class="stack-item">
+        <div class="stack-item-top">
+          <h4>${escapeHtml(item.nome)}</h4>
+          <span class="tiny-muted">${escapeHtml(getInstrutorNamesText(item))}</span>
+        </div>
+        <p class="stack-item-sub">
+          ${escapeHtml(item.igrejaNome || "Sem igreja")} • ${escapeHtml(item.serieNome || "Sem série")}
+        </p>
+        <div class="progress-meta">
+          ${p.capped} de ${p.total} • ${p.porcentagem}% • faltam ${p.faltantes}
+        </div>
+        <div class="progress-bar">
+          <span style="width:${p.porcentagem}%"></span>
+        </div>
+      </article>
+    `;
+  })
+  .join("");
 }
 
 function renderAttentionList() {
@@ -1055,14 +1114,16 @@ function renderInteressadosTable() {
   interessadosTable.innerHTML = data
     .map((item) => {
       const p = calcProgress(item.estudoAtual, item.totalEstudos);
+      const canAdvance = canAddStudyToInteressado(item);
 
       return `
         <tr>
           <td>
             <strong>${escapeHtml(item.nome)}</strong><br>
+            <span class="tiny-muted">${escapeHtml(item.telefone || "Sem telefone")}</span><br>
             <span class="tiny-muted">${escapeHtml(item.igrejaNome || "Sem igreja")} • ${escapeHtml(item.distrito || DISTRITO_FIXO)}</span>
           </td>
-          <td>${escapeHtml(item.responsavelNome || item.criadoPorNome || "-")}</td>
+          <td>${escapeHtml(getInstrutorNamesText(item))}</td>
           <td>${escapeHtml(item.serieNome || "-")}</td>
           <td>
             <div class="progress-meta">${p.capped} de ${p.total} • ${p.porcentagem}%</div>
@@ -1075,11 +1136,12 @@ function renderInteressadosTable() {
           <td>
             <div class="action-row">
               <button class="btn btn-secondary btn-sm" data-edit-interessado="${item.id}">Editar</button>
+              <button class="btn btn-secondary btn-sm" data-add-study="${item.id}" ${canAdvance ? "" : "disabled"}>+1 estudo</button>
               <button class="btn btn-danger btn-sm" data-delete-interessado="${item.id}">Excluir</button>
             </div>
           </td>
         </tr>
-      `;
+      `;nt
     })
     .join("");
 }
@@ -1350,15 +1412,23 @@ async function handleInteressadoSubmit(event) {
     }
 
     const selectedLocal = getSelectedInteressadoLocal();
-    const selectedResponsavel = getSelectedResponsavel();
+    const instrutoresSelecionados = getInstrutoresFromForm();
+
+    if (!instrutoresSelecionados.length) {
+      throw new Error("Selecione pelo menos um instrutor.");
+    }
+
     const progress = calcProgress(estudoAtual.value, selectedSerie.totalEstudos);
 
     if ((isLocal() || isMembro()) && selectedLocal.id !== getCurrentUserLocalId()) {
       throw new Error("Você só pode cadastrar interessados na sua igreja.");
     }
 
-    if (isMembro() && selectedResponsavel.id !== state.user.uid) {
-      throw new Error("Membro só pode registrar com ele mesmo como responsável.");
+    if (isMembro()) {
+      const membroFoiSelecionado = instrutoresSelecionados.some((item) => item.id === state.user.uid);
+      if (!membroFoiSelecionado) {
+        throw new Error("Membro deve estar incluído entre os instrutores.");
+      }
     }
 
     const payload = {
@@ -1369,12 +1439,15 @@ async function handleInteressadoSubmit(event) {
       igrejaNome: selectedLocal.nome,
       igrejaTipo: selectedLocal.tipo || "igreja",
       distrito: DISTRITO_FIXO,
-      responsavelId: selectedResponsavel.id,
-      responsavelNome: selectedResponsavel.nome,
-      responsavelPerfil: selectedResponsavel.perfil,
+
+      instrutorIds: instrutoresSelecionados.map((item) => item.id),
+      instrutorNomes: instrutoresSelecionados.map((item) => item.nome),
+      instrutores: instrutoresSelecionados,
+
       criadoPorId: state.user.uid,
       criadoPorNome: state.user.nome,
       criadoPorPerfil: state.user.perfil,
+
       serieId: selectedSerie.id,
       serieNome: selectedSerie.nome,
       estudoAtual: progress.capped,
@@ -1398,12 +1471,8 @@ async function handleInteressadoSubmit(event) {
         throw new Error("Registro não encontrado.");
       }
 
-      if (isMembro() && existing.criadoPorId !== state.user.uid) {
-        throw new Error("Você não pode editar registro de outro usuário.");
-      }
-
-      if (isLocal() && existing.igrejaId !== getCurrentUserLocalId()) {
-        throw new Error("Você não pode editar registro de outra igreja.");
+      if (!userCanManageInteressado(existing)) {
+        throw new Error("Você não pode editar esse registro.");
       }
 
       await updateDoc(doc(db, "interessados", recordId), payload);
@@ -1427,17 +1496,45 @@ async function handleInteressadoSubmit(event) {
   }
 }
 
+async function advanceInteressadoStudy(id) {
+  const item = state.interessados.find((row) => row.id === id);
+  if (!item) return;
+
+  if (!canAddStudyToInteressado(item)) {
+    showMessage("Você não pode avançar o estudo desse interessado.", "error");
+    return;
+  }
+
+  try {
+    const nextValue = Number(item.estudoAtual || 0) + 1;
+    const progress = calcProgress(nextValue, item.totalEstudos);
+
+    showLoading();
+
+    await updateDoc(doc(db, "interessados", id), {
+      estudoAtual: progress.capped,
+      porcentagem: progress.porcentagem,
+      faltantes: progress.faltantes,
+      atualizadoEm: new Date().toISOString(),
+      updatedAt: serverTimestamp()
+    });
+
+    showMessage("Estudo avançado com sucesso.", "success");
+    await refreshData();
+  } catch (error) {
+    console.error("Erro ao avançar estudo:", error);
+    showMessage("Não foi possível avançar o estudo.", "error");
+  } finally {
+    hideLoading();
+  }
+}
+
 async function editInteressado(id) {
   const item = state.interessados.find((row) => row.id === id);
   if (!item) return;
 
-  if (isMembro() && item.criadoPorId !== state.user.uid) {
+  if (!userCanManageInteressado(item)) {
     showMessage("Você não pode editar esse registro.", "error");
-    return;
-  }
-
-  if (isLocal() && item.igrejaId !== getCurrentUserLocalId()) {
-    showMessage("Você não pode editar registro de outra igreja.", "error");
     return;
   }
 
@@ -1449,13 +1546,8 @@ async function deleteInteressado(id) {
   const item = state.interessados.find((row) => row.id === id);
   if (!item) return;
 
-  if (isMembro() && item.criadoPorId !== state.user.uid) {
+  if (!userCanManageInteressado(item)) {
     showMessage("Você não pode excluir esse registro.", "error");
-    return;
-  }
-
-  if (isLocal() && item.igrejaId !== getCurrentUserLocalId()) {
-    showMessage("Você não pode excluir registro de outra igreja.", "error");
     return;
   }
 
@@ -2097,17 +2189,22 @@ function bindStaticEvents() {
   serieFilter?.addEventListener("change", renderInteressadosTable);
 
   interessadosTable?.addEventListener("click", async (event) => {
-    const editBtn = event.target.closest("[data-edit-interessado]");
-    const deleteBtn = event.target.closest("[data-delete-interessado]");
+  const editBtn = event.target.closest("[data-edit-interessado]");
+  const deleteBtn = event.target.closest("[data-delete-interessado]");
+  const addStudyBtn = event.target.closest("[data-add-study]");
 
-    if (editBtn) {
-      await editInteressado(editBtn.dataset.editInteressado);
-    }
+  if (editBtn) {
+    await editInteressado(editBtn.dataset.editInteressado);
+  }
 
-    if (deleteBtn) {
-      await deleteInteressado(deleteBtn.dataset.deleteInteressado);
-    }
-  });
+  if (addStudyBtn) {
+    await advanceInteressadoStudy(addStudyBtn.dataset.addStudy);
+  }
+
+  if (deleteBtn) {
+    await deleteInteressado(deleteBtn.dataset.deleteInteressado);
+  }
+});
 
   seriesList?.addEventListener("click", async (event) => {
     const editBtn = event.target.closest("[data-edit-serie]");
