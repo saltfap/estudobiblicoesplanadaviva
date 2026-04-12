@@ -208,6 +208,45 @@ function getAllowedProfilesToCreate() {
   return [];
 }
 
+function canEditUser(targetUser) {
+  const currentUser = state.user;
+
+  if (!currentUser || !targetUser) return false;
+
+  if (isAdmin()) return true;
+
+  if (isDistrital()) {
+    return ["local", "membro"].includes(targetUser.perfil);
+  }
+
+  if (isLocal()) {
+    return targetUser.perfil === "membro";
+  }
+
+  return false;
+}
+
+function canDeleteUser(targetUser) {
+  const currentUser = state.user;
+
+  if (!currentUser || !targetUser) return false;
+
+  // não permitir auto-exclusão
+  if (targetUser.id === currentUser.uid) return false;
+
+  if (isAdmin()) return true;
+
+  if (isDistrital()) {
+    return ["local", "membro"].includes(targetUser.perfil);
+  }
+
+  if (isLocal()) {
+    return targetUser.perfil === "membro";
+  }
+
+  return false;
+}
+
 function formatRole(role = "") {
   switch (role) {
     case "admin":
@@ -1281,6 +1320,18 @@ function renderUsuariosList() {
         ? (usuario.email || usuario.emailAuth || "-")
         : (usuario.username || "-");
 
+      const podeEditar = canEditUser(usuario);
+      const podeExcluir = canDeleteUser(usuario);
+
+      const controls = (podeEditar || podeExcluir)
+        ? `
+          <div class="action-row">
+            ${podeEditar ? `<button class="btn btn-secondary btn-sm" data-edit-user="${usuario.id}">Editar</button>` : ""}
+            ${podeExcluir ? `<button class="btn btn-danger btn-sm" data-delete-user="${usuario.id}">Excluir</button>` : ""}
+          </div>
+        `
+        : "";
+
       return `
         <article class="stack-item">
           <div class="stack-item-top">
@@ -1295,6 +1346,7 @@ function renderUsuariosList() {
               ${usuario.ativo ? "Ativo" : "Inativo"}
             </span>
           </div>
+          ${controls}
         </article>
       `;
     })
@@ -1428,6 +1480,73 @@ function updateUserFormByProfile() {
 
   if (novoUsuarioIgreja) {
     novoUsuarioIgreja.required = localAccount;
+  }
+}
+
+async function editUser(userId) {
+  const targetUser = getUserById(userId);
+
+  if (!targetUser) {
+    showMessage("Usuário não encontrado.", "error");
+    return;
+  }
+
+  if (!canEditUser(targetUser)) {
+    showMessage("Você não tem permissão para editar este usuário.", "error");
+    return;
+  }
+
+  novoUsuarioNome.value = targetUser.nome || "";
+  novoUsuarioPerfil.value = targetUser.perfil || "membro";
+  novoUsuarioDistrito.value = targetUser.distrito || DISTRITO_FIXO;
+  novoUsuarioIgreja.value = targetUser.igrejaId || "";
+  novoUsuarioUsername.value = targetUser.username || "";
+  novoUsuarioEmail.value = targetUser.email || "";
+
+  updateUserFormByProfile();
+
+  userForm.dataset.editingUserId = targetUser.id;
+
+  showMessage(`Editando usuário: ${targetUser.nome}`, "info");
+}
+
+async function deleteUser(userId) {
+  const targetUser = getUserById(userId);
+
+  if (!targetUser) {
+    showMessage("Usuário não encontrado.", "error");
+    return;
+  }
+
+  if (!canDeleteUser(targetUser)) {
+    showMessage("Você não tem permissão para excluir este usuário.", "error");
+    return;
+  }
+
+  const confirmed = window.confirm(`Tem certeza que deseja excluir o usuário "${targetUser.nome}"?`);
+  if (!confirmed) return;
+
+  showLoading();
+  clearMessage();
+
+  try {
+    await deleteDoc(doc(db, "usuarios", userId));
+
+    if (userForm?.dataset?.editingUserId === userId) {
+      delete userForm.dataset.editingUserId;
+      userForm.reset();
+      renderUserProfileOptions();
+      renderUserLocalOptions();
+      updateUserFormByProfile();
+    }
+
+    showMessage("Usuário excluído com sucesso.", "success");
+    await refreshData();
+  } catch (error) {
+    console.error("Erro ao excluir usuário:", error);
+    showMessage("Não foi possível excluir o usuário.", "error");
+  } finally {
+    hideLoading();
   }
 }
 
@@ -2112,7 +2231,10 @@ async function handleUserFormSubmit(event) {
   event.preventDefault();
   clearMessage();
 
-  if (!canCreateUsers()) {
+  const editingUserId = userForm?.dataset?.editingUserId || "";
+  const editingUser = editingUserId ? getUserById(editingUserId) : null;
+
+  if (!editingUserId && !canCreateUsers()) {
     showMessage("Você não pode criar usuários.", "error");
     return;
   }
@@ -2126,8 +2248,62 @@ async function handleUserFormSubmit(event) {
   }
 
   try {
-    validateUserCreationByRole(perfilValue);
     showLoading();
+
+    if (editingUserId) {
+      if (!editingUser) {
+        throw new Error("Usuário não encontrado.");
+      }
+
+      if (!canEditUser(editingUser)) {
+        throw new Error("Você não tem permissão para editar este usuário.");
+      }
+
+      const payload = {
+        nome: nomeValue,
+        atualizadoEm: new Date().toISOString(),
+        updatedAt: serverTimestamp()
+      };
+
+      if (isAdmin()) {
+        payload.perfil = perfilValue;
+      }
+
+      if (["local", "membro"].includes(editingUser.perfil) || ["local", "membro"].includes(payload.perfil || editingUser.perfil)) {
+        const igrejaIdValue = novoUsuarioIgreja.value;
+
+        if (!igrejaIdValue) {
+          throw new Error("Selecione a igreja.");
+        }
+
+        const local = getLocalById(igrejaIdValue);
+        if (!local) {
+          throw new Error("Igreja inválida.");
+        }
+
+        if (isLocal() && igrejaIdValue !== getCurrentUserLocalId()) {
+          throw new Error("Você só pode editar usuários da sua igreja.");
+        }
+
+        payload.igrejaId = local.id;
+        payload.igrejaNome = local.nome;
+        payload.distrito = DISTRITO_FIXO;
+      }
+
+      await updateDoc(doc(db, "usuarios", editingUserId), payload);
+
+      delete userForm.dataset.editingUserId;
+      userForm.reset();
+      renderUserProfileOptions();
+      renderUserLocalOptions();
+      updateUserFormByProfile();
+
+      showMessage("Usuário atualizado com sucesso.", "success");
+      await refreshData();
+      return;
+    }
+
+    validateUserCreationByRole(perfilValue);
 
     if (perfilValue === "admin" || perfilValue === "distrital") {
       const emailValue = novoUsuarioEmail.value.trim();
@@ -2146,6 +2322,9 @@ async function handleUserFormSubmit(event) {
 
       userForm.reset();
       renderUserProfileOptions();
+      renderUserLocalOptions();
+      updateUserFormByProfile();
+
       showMessage("Usuário global criado com sucesso.", "success");
       await refreshData();
       return;
@@ -2176,11 +2355,6 @@ async function handleUserFormSubmit(event) {
       throw new Error("Você só pode criar usuários da sua igreja.");
     }
 
-    const usernameIsFree = await ensureUniqueUsernameInChurch(usernameValue, igrejaIdValue);
-    if (!usernameIsFree) {
-      throw new Error("Esse usuário já existe nessa igreja.");
-    }
-
     await createLocalOrMembroUserWithSecondaryApp({
       nome: nomeValue,
       perfil: perfilValue,
@@ -2192,10 +2366,13 @@ async function handleUserFormSubmit(event) {
 
     userForm.reset();
     renderUserProfileOptions();
+    renderUserLocalOptions();
+    updateUserFormByProfile();
+
     showMessage("Usuário criado com sucesso.", "success");
     await refreshData();
   } catch (error) {
-    console.error("Erro ao criar usuário:", error);
+    console.error("Erro ao salvar usuário:", error);
     showMessage(mapUserCreationError(error), "error");
   } finally {
     hideLoading();
@@ -2283,30 +2460,43 @@ function bindStaticEvents() {
   });
 
   seriesList?.addEventListener("click", async (event) => {
-    const editBtn = event.target.closest("[data-edit-serie]");
-    const deleteBtn = event.target.closest("[data-delete-serie]");
+  const editBtn = event.target.closest("[data-edit-serie]");
+  const deleteBtn = event.target.closest("[data-delete-serie]");
 
-    if (editBtn) {
-      await editSerie(editBtn.dataset.editSerie);
-    }
+  if (editBtn) {
+    await editSerie(editBtn.dataset.editSerie);
+  }
 
-    if (deleteBtn) {
-      await deleteSerie(deleteBtn.dataset.deleteSerie);
-    }
-  });
+  if (deleteBtn) {
+    await deleteSerie(deleteBtn.dataset.deleteSerie);
+  }
+});
 
-  locaisList?.addEventListener("click", async (event) => {
-    const editBtn = event.target.closest("[data-edit-local]");
-    const deleteBtn = event.target.closest("[data-delete-local]");
+usuariosList?.addEventListener("click", async (event) => {
+  const editBtn = event.target.closest("[data-edit-user]");
+  const deleteBtn = event.target.closest("[data-delete-user]");
 
-    if (editBtn) {
-      await editLocal(editBtn.dataset.editLocal);
-    }
+  if (editBtn) {
+    await editUser(editBtn.dataset.editUser);
+  }
 
-    if (deleteBtn) {
-      await deleteLocal(deleteBtn.dataset.deleteLocal);
-    }
-  });
+  if (deleteBtn) {
+    await deleteUser(deleteBtn.dataset.deleteUser);
+  }
+});
+
+locaisList?.addEventListener("click", async (event) => {
+  const editBtn = event.target.closest("[data-edit-local]");
+  const deleteBtn = event.target.closest("[data-delete-local]");
+
+  if (editBtn) {
+    await editLocal(editBtn.dataset.editLocal);
+  }
+
+  if (deleteBtn) {
+    await deleteLocal(deleteBtn.dataset.deleteLocal);
+  }
+});
 
   novoUsuarioPerfil?.addEventListener("change", updateUserFormByProfile);
 }
