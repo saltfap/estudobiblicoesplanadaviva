@@ -252,8 +252,46 @@ function isDecision(item) {
 }
 
 /* =========================
-   NOVO: ESCALAS DO DASHBOARD
+   DASHBOARD: PROGRESSO ATUAL
 ========================= */
+function getProgressBuckets(data = []) {
+  const buckets = {
+    "0–25%": 0,
+    "26–50%": 0,
+    "51–75%": 0,
+    "76–99%": 0,
+    "100%": 0
+  };
+
+  data.forEach((item) => {
+    const value = Number(item.porcentagem || 0);
+
+    if (value <= 25) {
+      buckets["0–25%"] += 1;
+    } else if (value <= 50) {
+      buckets["26–50%"] += 1;
+    } else if (value <= 75) {
+      buckets["51–75%"] += 1;
+    } else if (value < 100) {
+      buckets["76–99%"] += 1;
+    } else {
+      buckets["100%"] += 1;
+    }
+  });
+
+  return buckets;
+}
+
+function getAverageProgressValue(data = []) {
+  if (!data.length) return 0;
+
+  const total = data.reduce((sum, item) => {
+    return sum + Number(item.porcentagem || 0);
+  }, 0);
+
+  return Math.round(total / data.length);
+}
+
 function getSpiritualReadinessValue(statusText = "") {
   const map = {
     "Desinteressado": 10,
@@ -267,16 +305,6 @@ function getSpiritualReadinessValue(statusText = "") {
   return map[statusText] ?? 0;
 }
 
-function getAverageProgressValue(data = []) {
-  if (!data.length) return 0;
-
-  const total = data.reduce((sum, item) => {
-    return sum + Number(item.porcentagem || 0);
-  }, 0);
-
-  return Math.round(total / data.length);
-}
-
 function getAverageSpiritualReadinessValue(data = []) {
   if (!data.length) return 0;
 
@@ -287,66 +315,107 @@ function getAverageSpiritualReadinessValue(data = []) {
   return Math.round(total / data.length);
 }
 
-function getScaleLabel(value) {
-  if (value >= 85) return "Muito forte";
-  if (value >= 70) return "Bom";
-  if (value >= 50) return "Moderado";
-  if (value >= 30) return "Atenção";
-  return "Crítico";
+function getProgressInsightLabel(avg) {
+  if (avg >= 85) return "Grupo muito avançado";
+  if (avg >= 65) return "Bom avanço geral";
+  if (avg >= 45) return "Avanço moderado";
+  if (avg >= 25) return "Base ainda inicial";
+  return "Progresso muito inicial";
+}
+
+function getReadinessInsightLabel(avg) {
+  if (avg >= 85) return "Prontidão espiritual muito alta";
+  if (avg >= 65) return "Prontidão espiritual consistente";
+  if (avg >= 45) return "Prontidão em desenvolvimento";
+  if (avg >= 25) return "Prontidão ainda frágil";
+  return "Baixa prontidão no momento";
 }
 
 function renderDashboardScales() {
   if (!dashboardScales) return;
 
   const data = getVisibleInteressados();
-  const prontidao = getAverageSpiritualReadinessValue(data);
-  const progresso = getAverageProgressValue(data);
+  const progressoMedio = getAverageProgressValue(data);
+  const prontidaoMedia = getAverageSpiritualReadinessValue(data);
+  const buckets = getProgressBuckets(data);
 
   if (!data.length) {
     dashboardScales.innerHTML = `
       <div class="card">
         <div class="card-header">
           <div>
-            <h3>Escalas do painel</h3>
-            <p>Leitura rápida da prontidão espiritual e do avanço dos estudos.</p>
+            <h3>Panorama atual do progresso nos estudos</h3>
+            <p>Distribuição dos interessados por faixa de avanço.</p>
           </div>
         </div>
-        <div class="empty-state">Ainda não há interessados suficientes para exibir as escalas.</div>
+        <div class="empty-state">Ainda não há interessados suficientes para exibir o gráfico.</div>
       </div>
     `;
     return;
   }
 
+  const maxValue = Math.max(...Object.values(buckets), 1);
+
+  const barsHtml = Object.entries(buckets)
+    .map(([label, value]) => {
+      const height = Math.max((value / maxValue) * 220, value > 0 ? 22 : 10);
+
+      return `
+        <div class="progress-chart-col">
+          <div class="progress-chart-value">${value}</div>
+          <div class="progress-chart-bar-wrap">
+            <div class="progress-chart-bar" style="height:${height}px;"></div>
+          </div>
+          <div class="progress-chart-label">${label}</div>
+        </div>
+      `;
+    })
+    .join("");
+
   dashboardScales.innerHTML = `
     <div class="card">
-      <div class="card-header">
+      <div class="card-header card-header-wrap">
         <div>
-          <h3>Escalas do painel</h3>
-          <p>Leitura rápida da prontidão espiritual e do avanço dos estudos.</p>
+          <h3>Panorama atual do progresso nos estudos</h3>
+          <p>Distribuição dos interessados por faixa de avanço no momento atual.</p>
         </div>
       </div>
 
-      <div class="scale-grid">
-        <div class="scale-card">
-          <div class="scale-top">
-            <strong>Prontidão espiritual</strong>
-            <span>${prontidao}%</span>
-          </div>
-          <div class="scale-bar">
-            <span style="width:${prontidao}%"></span>
-          </div>
-          <p class="scale-caption">${getScaleLabel(prontidao)}</p>
+      <div class="progress-summary-grid">
+        <div class="progress-summary-card">
+          <span class="progress-summary-kicker">Progresso médio</span>
+          <strong class="progress-summary-value">${progressoMedio}%</strong>
+          <p class="progress-summary-text">${getProgressInsightLabel(progressoMedio)}</p>
         </div>
 
-        <div class="scale-card">
-          <div class="scale-top">
-            <strong>Progresso médio dos estudos</strong>
-            <span>${progresso}%</span>
+        <div class="progress-summary-card">
+          <span class="progress-summary-kicker">Prontidão espiritual</span>
+          <strong class="progress-summary-value">${prontidaoMedia}%</strong>
+          <p class="progress-summary-text">${getReadinessInsightLabel(prontidaoMedia)}</p>
+        </div>
+      </div>
+
+      <div class="progress-chart-shell">
+        <div class="progress-chart-y-axis">
+          <span>${maxValue}</span>
+          <span>${Math.round(maxValue * 0.75)}</span>
+          <span>${Math.round(maxValue * 0.5)}</span>
+          <span>${Math.round(maxValue * 0.25)}</span>
+          <span>0</span>
+        </div>
+
+        <div class="progress-chart-area">
+          <div class="progress-chart-grid">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
           </div>
-          <div class="scale-bar">
-            <span style="width:${progresso}%"></span>
+
+          <div class="progress-chart-cols">
+            ${barsHtml}
           </div>
-          <p class="scale-caption">${getScaleLabel(progresso)}</p>
         </div>
       </div>
     </div>
