@@ -861,25 +861,6 @@ function getResponsibleUsersForCurrentContext() {
   return [];
 }
 
-function getResponsibleUsersForCurrentContext() {
-  if (isAdmin() || isDistrital()) {
-    return sortByName(state.usuarios.filter((u) => u.ativo !== false));
-  }
-
-  if (isLocal()) {
-    const localId = getCurrentUserLocalId();
-    return sortByName(
-      state.usuarios.filter((u) => u.ativo !== false && u.igrejaId === localId)
-    );
-  }
-
-  if (isMembro()) {
-    return state.user ? [state.user] : [];
-  }
-
-  return [];
-}
-
 function buildInstrutorOptionsHtml(selectedId = "") {
   const users = getResponsibleUsersForCurrentContext();
 
