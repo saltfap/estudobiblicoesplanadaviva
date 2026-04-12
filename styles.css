@@ -660,6 +660,16 @@ a{
   line-height:1.6;
 }
 
+.data-table td .tiny-muted{
+  display:inline-block;
+  margin-top:3px;
+  line-height:1.45;
+}
+
+.data-table td:nth-child(2){
+  min-width:180px;
+}
+
 /* =========================================================
    TOOLBAR / TABLE
 ========================================================= */
@@ -763,20 +773,30 @@ a{
 }
 
 .field select[multiple]{
-  min-height:170px;
-  padding:8px;
+  min-height:180px;
+  padding:10px;
   overflow:auto;
+  border-radius:18px;
+  background:
+    linear-gradient(180deg, #ffffff, #fbfefd);
 }
 
 .field select[multiple] option{
-  padding:10px 12px;
-  border-radius:10px;
-  margin:2px 0;
+  padding:12px 14px;
+  border-radius:12px;
+  margin:4px 0;
+  font-weight:600;
+  color:var(--text);
 }
 
 .field select[multiple] option:checked{
   background:linear-gradient(180deg, var(--primary), var(--primary-2));
   color:#fff;
+}
+
+.field select[multiple] option:hover{
+  background:#edf8f5;
+  color:var(--text);
 }
 
 .field textarea{
@@ -895,6 +915,17 @@ a{
   font-weight:700;
 }
 
+.btn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+  transform:none !important;
+  box-shadow:none;
+}
+
+.btn:disabled:hover{
+  transform:none;
+}
+
 .action-row{
   display:flex;
   gap:8px;
@@ -951,6 +982,11 @@ a{
 .status-pronto-para-batismo{
   background:#eaf1ff;
   color:#1e40af;
+}
+
+.status-batismo-realizado{
+  background:#e7f7ee;
+  color:#0f6b38;
 }
 
 .interest-alto{
@@ -1509,8 +1545,8 @@ a{
   }
 
   .field select[multiple]{
-    min-height:140px;
-  }
+  min-height:150px;
+}
 }
 
 @media (max-width: 560px){
