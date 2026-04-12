@@ -85,7 +85,8 @@ const telefone = document.getElementById("telefone");
 const endereco = document.getElementById("endereco");
 const igreja = document.getElementById("igreja");
 const distrito = document.getElementById("distrito");
-const instrutor = document.getElementById("instrutor"); // responsável
+const instrutoresContainer = document.getElementById("instrutoresContainer");
+const addInstrutorBtn = document.getElementById("addInstrutorBtn");
 const serieId = document.getElementById("serieId");
 const estudoAtual = document.getElementById("estudoAtual");
 const progressoPreview = document.getElementById("progressoPreview");
@@ -220,24 +221,6 @@ function formatRole(role = "") {
     default:
       return role || "-";
   }
-}
-
-function getInstrutoresFromForm() {
-  if (!instrutor) return [];
-
-  const selectedOptions = Array.from(instrutor.selectedOptions || []);
-  const ids = selectedOptions.map((option) => option.value).filter(Boolean);
-
-  const users = ids
-    .map((id) => getUserById(id))
-    .filter(Boolean)
-    .map((user) => ({
-      id: user.id,
-      nome: user.nome,
-      perfil: user.perfil
-    }));
-
-  return users;
 }
 
 function getInstrutorNames(item) {
@@ -878,30 +861,135 @@ function getResponsibleUsersForCurrentContext() {
   return [];
 }
 
-function renderResponsavelOptions(selectedIds = []) {
-  if (!instrutor) return;
-
-  const users = getResponsibleUsersForCurrentContext();
-
-  instrutor.innerHTML = users
-    .map((u) => `<option value="${u.id}">${escapeHtml(u.nome)}</option>`)
-    .join("");
-
-  instrutor.multiple = true;
-  instrutor.disabled = false;
-
-  if (isMembro()) {
-    Array.from(instrutor.options).forEach((option) => {
-      option.selected = option.value === state.user?.uid;
-    });
-    instrutor.disabled = true;
-    return;
+function getResponsibleUsersForCurrentContext() {
+  if (isAdmin() || isDistrital()) {
+    return sortByName(state.usuarios.filter((u) => u.ativo !== false));
   }
 
-  const safeIds = Array.isArray(selectedIds) ? selectedIds : [];
-  Array.from(instrutor.options).forEach((option) => {
-    option.selected = safeIds.includes(option.value);
+  if (isLocal()) {
+    const localId = getCurrentUserLocalId();
+    return sortByName(
+      state.usuarios.filter((u) => u.ativo !== false && u.igrejaId === localId)
+    );
+  }
+
+  if (isMembro()) {
+    return state.user ? [state.user] : [];
+  }
+
+  return [];
+}
+
+function buildInstrutorOptionsHtml(selectedId = "") {
+  const users = getResponsibleUsersForCurrentContext();
+
+  return (
+    `<option value="">Selecionar instrutor</option>` +
+    users
+      .map((u) => {
+        const selected = u.id === selectedId ? "selected" : "";
+        return `<option value="${u.id}" ${selected}>${escapeHtml(u.nome)}</option>`;
+      })
+      .join("")
+  );
+}
+
+function updateInstrutorRowsUI() {
+  if (!instrutoresContainer) return;
+
+  const rows = Array.from(instrutoresContainer.querySelectorAll(".instrutor-row"));
+  const isSingleLocked = isMembro();
+
+  rows.forEach((row, index) => {
+    const removeBtn = row.querySelector(".remove-instrutor-btn");
+    const select = row.querySelector(".instrutor-select");
+
+    if (removeBtn) {
+      removeBtn.style.display =
+        rows.length > 1 && !isSingleLocked ? "" : "none";
+    }
+
+    if (select) {
+      select.disabled = isSingleLocked;
+    }
+
+    if (isSingleLocked && index > 0) {
+      row.remove();
+    }
   });
+}
+
+function createInstrutorRow(selectedId = "") {
+  const row = document.createElement("div");
+  row.className = "instrutor-row";
+
+  const select = document.createElement("select");
+  select.className = "instrutor-select";
+  select.required = true;
+  select.innerHTML = buildInstrutorOptionsHtml(selectedId);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "btn btn-secondary btn-sm remove-instrutor-btn";
+  removeBtn.textContent = "Remover";
+
+  removeBtn.addEventListener("click", () => {
+    row.remove();
+    updateInstrutorRowsUI();
+  });
+
+  row.appendChild(select);
+  row.appendChild(removeBtn);
+
+  return row;
+}
+
+function renderResponsavelOptions(selectedIds = []) {
+  if (!instrutoresContainer) return;
+
+  instrutoresContainer.innerHTML = "";
+
+  const safeIds = Array.isArray(selectedIds) && selectedIds.length
+    ? selectedIds
+    : [""];
+
+  safeIds.forEach((id) => {
+    instrutoresContainer.appendChild(createInstrutorRow(id));
+  });
+
+  if (isMembro()) {
+    const firstSelect = instrutoresContainer.querySelector(".instrutor-select");
+    if (firstSelect) {
+      firstSelect.value = state.user?.uid || "";
+    }
+  }
+
+  updateInstrutorRowsUI();
+}
+
+function getInstrutoresFromForm() {
+  if (!instrutoresContainer) return [];
+
+  const selects = Array.from(
+    instrutoresContainer.querySelectorAll(".instrutor-select")
+  );
+
+  const ids = selects
+    .map((select) => select.value)
+    .filter(Boolean);
+
+  const uniqueIds = [...new Set(ids)];
+
+  const users = uniqueIds
+    .map((id) => getUserById(id))
+    .filter(Boolean)
+    .map((user) => ({
+      id: user.id,
+      nome: user.nome,
+      perfil: user.perfil
+    }));
+
+  return users;
 }
 
 function updateProgressPreview() {
@@ -2143,6 +2231,14 @@ function bindStaticEvents() {
       setSection(targetSection);
     });
   });
+
+  addInstrutorBtn?.addEventListener("click", () => {
+    if (!instrutoresContainer) return;
+
+    instrutoresContainer.appendChild(createInstrutorRow());
+    updateInstrutorRowsUI();
+  });
+}
 
   openInteressadoModalBtn?.addEventListener("click", () => {
     resetInteressadoForm();
