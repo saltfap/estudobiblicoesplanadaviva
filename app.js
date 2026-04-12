@@ -2219,7 +2219,6 @@ function bindStaticEvents() {
     instrutoresContainer.appendChild(createInstrutorRow());
     updateInstrutorRowsUI();
   });
-}
 
   openInteressadoModalBtn?.addEventListener("click", () => {
     resetInteressadoForm();
@@ -2266,22 +2265,22 @@ function bindStaticEvents() {
   serieFilter?.addEventListener("change", renderInteressadosTable);
 
   interessadosTable?.addEventListener("click", async (event) => {
-  const editBtn = event.target.closest("[data-edit-interessado]");
-  const deleteBtn = event.target.closest("[data-delete-interessado]");
-  const addStudyBtn = event.target.closest("[data-add-study]");
+    const editBtn = event.target.closest("[data-edit-interessado]");
+    const deleteBtn = event.target.closest("[data-delete-interessado]");
+    const addStudyBtn = event.target.closest("[data-add-study]");
 
-  if (editBtn) {
-    await editInteressado(editBtn.dataset.editInteressado);
-  }
+    if (editBtn) {
+      await editInteressado(editBtn.dataset.editInteressado);
+    }
 
-  if (addStudyBtn) {
-    await advanceInteressadoStudy(addStudyBtn.dataset.addStudy);
-  }
+    if (addStudyBtn) {
+      await advanceInteressadoStudy(addStudyBtn.dataset.addStudy);
+    }
 
-  if (deleteBtn) {
-    await deleteInteressado(deleteBtn.dataset.deleteInteressado);
-  }
-});
+    if (deleteBtn) {
+      await deleteInteressado(deleteBtn.dataset.deleteInteressado);
+    }
+  });
 
   seriesList?.addEventListener("click", async (event) => {
     const editBtn = event.target.closest("[data-edit-serie]");
