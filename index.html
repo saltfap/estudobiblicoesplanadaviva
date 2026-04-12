@@ -549,11 +549,34 @@
           <input id="distrito" type="text" value="Esplanada" readonly />
         </div>
 
-        <div class="field">
-  <label for="instrutor">Instrutores</label>
-  <select id="instrutor" multiple required></select>
+        <div class="field full-span">
+  <label>Instrutores</label>
+
+  <div id="instrutoresContainer" class="instrutores-container">
+    <div class="instrutor-row">
+      <select class="instrutor-select" required></select>
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm remove-instrutor-btn"
+        style="display:none;"
+      >
+        Remover
+      </button>
+    </div>
+  </div>
+
+  <div class="form-actions" style="justify-content:flex-start; margin-top:8px;">
+    <button
+      type="button"
+      id="addInstrutorBtn"
+      class="btn btn-secondary btn-sm"
+    >
+      + Adicionar instrutor
+    </button>
+  </div>
+
   <small class="helper-text">
-    Segure Ctrl (ou Cmd no Mac) para selecionar mais de um instrutor.
+    Adicione um ou mais instrutores responsáveis por este interessado.
   </small>
 </div>
 
