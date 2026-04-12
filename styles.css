@@ -735,6 +735,16 @@ a{
   background:#fbfdff;
 }
 
+.data-table td .tiny-muted{
+  display:inline-block;
+  margin-top:3px;
+  line-height:1.45;
+}
+
+.data-table td:nth-child(2){
+  min-width:180px;
+}
+
 /* =========================================================
    FORM
 ========================================================= */
@@ -825,6 +835,40 @@ a{
   line-height:1.5;
 }
 
+.instrutores-container{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.instrutor-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+}
+
+.instrutor-select{
+  width:100%;
+  min-height:48px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+  color:var(--text);
+  padding:12px 14px;
+  transition:var(--transition);
+  box-shadow:0 1px 0 rgba(16,24,40,.01);
+}
+
+.instrutor-select:focus{
+  border-color:rgba(27,155,127,.55);
+  box-shadow:0 0 0 4px rgba(27,155,127,.10);
+}
+
+.remove-instrutor-btn{
+  white-space:nowrap;
+}
+
 .full-span{
   grid-column:1 / -1;
 }
@@ -860,6 +904,17 @@ a{
 
 .btn:active{
   transform:translateY(0);
+}
+
+.btn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+  transform:none !important;
+  box-shadow:none;
+}
+
+.btn:disabled:hover{
+  transform:none;
 }
 
 .btn-block{
@@ -1366,6 +1421,14 @@ a{
     font-size:12px;
   }
 }
+
+  .instrutor-row{
+    grid-template-columns:1fr;
+  }
+
+  .remove-instrutor-btn{
+    width:100%;
+  }
 
 @media (max-width: 560px){
   .progress-summary-card{
