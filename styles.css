@@ -1376,6 +1376,87 @@ a{
 }
 
 /* =========================================================
+   CHURCH STATUS CHART
+========================================================= */
+.church-status-chart{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-top:10px;
+}
+
+.church-status-row{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.church-status-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.church-status-label{
+  font-size:13px;
+  font-weight:700;
+  color:var(--text);
+}
+
+.church-status-value{
+  font-size:13px;
+  font-weight:800;
+  color:var(--text-soft);
+}
+
+.church-status-bar{
+  width:100%;
+  height:12px;
+  border-radius:999px;
+  overflow:hidden;
+  background:#edf2f8;
+}
+
+.church-status-bar span{
+  display:block;
+  height:100%;
+  border-radius:999px;
+  min-width:0;
+}
+
+.status-ativo-fill{
+  background:linear-gradient(90deg, #22a06b, #15803d);
+}
+
+.status-apelo-fill{
+  background:linear-gradient(90deg, #14b8a6, #0f766e);
+}
+
+.status-batismo-fill{
+  background:linear-gradient(90deg, #60a5fa, #2563eb);
+}
+
+.status-concluido-fill{
+  background:linear-gradient(90deg, #34d399, #059669);
+}
+
+.status-batismo-realizado-fill{
+  background:linear-gradient(90deg, #16a34a, #166534);
+}
+
+@media (max-width: 720px){
+  .church-status-label,
+  .church-status-value{
+    font-size:12px;
+  }
+
+  .church-status-bar{
+    height:10px;
+  }
+}
+
+/* =========================================================
    RESPONSIVO DO GRÁFICO
 ========================================================= */
 @media (max-width: 980px){
