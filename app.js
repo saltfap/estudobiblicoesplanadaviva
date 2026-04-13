@@ -462,14 +462,58 @@ function getChurchGroupedData(data = []) {
   );
 }
 
-function renderStatusSummaryPills(percentages) {
+function renderStatusSummaryChart(percentages) {
   return `
-    <div class="pill-row">
-      <span class="pill status-ativo">${percentages.ativos}% ativos</span>
-      <span class="pill status-pronto-para-apelo">${percentages.apelo}% apelo</span>
-      <span class="pill status-pronto-para-batismo">${percentages.batismo}% batismo</span>
-      <span class="pill status-concluido">${percentages.concluidos}% concluídos</span>
-      <span class="pill status-batismo-realizado">${percentages.batismoRealizado}% batismo realizado</span>
+    <div class="church-status-chart">
+      <div class="church-status-row">
+        <div class="church-status-head">
+          <span class="church-status-label">Ativos</span>
+          <strong class="church-status-value">${percentages.ativos}%</strong>
+        </div>
+        <div class="church-status-bar">
+          <span class="status-ativo-fill" style="width:${percentages.ativos}%"></span>
+        </div>
+      </div>
+
+      <div class="church-status-row">
+        <div class="church-status-head">
+          <span class="church-status-label">Apelo</span>
+          <strong class="church-status-value">${percentages.apelo}%</strong>
+        </div>
+        <div class="church-status-bar">
+          <span class="status-apelo-fill" style="width:${percentages.apelo}%"></span>
+        </div>
+      </div>
+
+      <div class="church-status-row">
+        <div class="church-status-head">
+          <span class="church-status-label">Pronto p/ batismo</span>
+          <strong class="church-status-value">${percentages.batismo}%</strong>
+        </div>
+        <div class="church-status-bar">
+          <span class="status-batismo-fill" style="width:${percentages.batismo}%"></span>
+        </div>
+      </div>
+
+      <div class="church-status-row">
+        <div class="church-status-head">
+          <span class="church-status-label">Concluídos</span>
+          <strong class="church-status-value">${percentages.concluidos}%</strong>
+        </div>
+        <div class="church-status-bar">
+          <span class="status-concluido-fill" style="width:${percentages.concluidos}%"></span>
+        </div>
+      </div>
+
+      <div class="church-status-row">
+        <div class="church-status-head">
+          <span class="church-status-label">Batismo realizado</span>
+          <strong class="church-status-value">${percentages.batismoRealizado}%</strong>
+        </div>
+        <div class="church-status-bar">
+          <span class="status-batismo-realizado-fill" style="width:${percentages.batismoRealizado}%"></span>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -546,7 +590,7 @@ function renderDashboardScales() {
                     Visão percentual atual dos principais status nesta igreja.
                   </p>
 
-                  ${renderStatusSummaryPills(percentages)}
+                  ${renderStatusSummaryChart(percentages)}
                 </article>
               `;
             })
