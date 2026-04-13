@@ -405,6 +405,75 @@ function getReadinessInsightLabel(avg) {
   return "Baixa prontidão no momento";
 }
 
+function getMainStatusCounts(data = []) {
+  const counts = {
+    ativos: 0,
+    apelo: 0,
+    batismo: 0,
+    concluidos: 0,
+    batismoRealizado: 0
+  };
+
+  data.forEach((item) => {
+    if (item.status === "Ativo") counts.ativos += 1;
+    if (item.status === "Pronto para apelo") counts.apelo += 1;
+    if (item.status === "Pronto para batismo") counts.batismo += 1;
+    if (item.status === "Concluído") counts.concluidos += 1;
+    if (item.status === "Batismo Realizado") counts.batismoRealizado += 1;
+  });
+
+  return counts;
+}
+
+function getMainStatusPercentages(data = []) {
+  const total = data.length || 1;
+  const counts = getMainStatusCounts(data);
+
+  return {
+    total: data.length,
+    ativos: Math.round((counts.ativos / total) * 100),
+    apelo: Math.round((counts.apelo / total) * 100),
+    batismo: Math.round((counts.batismo / total) * 100),
+    concluidos: Math.round((counts.concluidos / total) * 100),
+    batismoRealizado: Math.round((counts.batismoRealizado / total) * 100)
+  };
+}
+
+function getChurchGroupedData(data = []) {
+  const churchMap = new Map();
+
+  data.forEach((item) => {
+    const churchId = item.igrejaId || "sem-igreja";
+    const churchName = item.igrejaNome || "Sem igreja";
+
+    if (!churchMap.has(churchId)) {
+      churchMap.set(churchId, {
+        igrejaId: churchId,
+        igrejaNome: churchName,
+        items: []
+      });
+    }
+
+    churchMap.get(churchId).items.push(item);
+  });
+
+  return Array.from(churchMap.values()).sort((a, b) =>
+    a.igrejaNome.localeCompare(b.igrejaNome, "pt-BR")
+  );
+}
+
+function renderStatusSummaryPills(percentages) {
+  return `
+    <div class="pill-row">
+      <span class="pill status-ativo">${percentages.ativos}% ativos</span>
+      <span class="pill status-pronto-para-apelo">${percentages.apelo}% apelo</span>
+      <span class="pill status-pronto-para-batismo">${percentages.batismo}% batismo</span>
+      <span class="pill status-concluido">${percentages.concluidos}% concluídos</span>
+      <span class="pill status-batismo-realizado">${percentages.batismoRealizado}% batismo realizado</span>
+    </div>
+  `;
+}
+
 function renderDashboardScales() {
   if (!dashboardScales) return;
 
@@ -418,11 +487,11 @@ function renderDashboardScales() {
       <div class="card">
         <div class="card-header">
           <div>
-            <h3>Panorama atual do progresso nos estudos</h3>
-            <p>Distribuição dos interessados por faixa de avanço.</p>
+            <h3>Painel do progresso e status</h3>
+            <p>Distribuição dos interessados e panorama espiritual atual.</p>
           </div>
         </div>
-        <div class="empty-state">Ainda não há interessados suficientes para exibir o gráfico.</div>
+        <div class="empty-state">Ainda não há interessados suficientes para exibir o painel.</div>
       </div>
     `;
     return;
@@ -445,6 +514,69 @@ function renderDashboardScales() {
       `;
     })
     .join("");
+
+  const geral = getMainStatusPercentages(data);
+
+  const districtOrAdminView = isAdmin() || isDistrital();
+  const churches = getChurchGroupedData(data);
+
+  const churchCardsHtml = districtOrAdminView
+    ? `
+      <div class="card" style="margin-top:18px;">
+        <div class="card-header">
+          <div>
+            <h3>Panorama por igreja</h3>
+            <p>Total de estudos bíblicos e percentuais dos principais níveis por igreja.</p>
+          </div>
+        </div>
+
+        <div class="stack-list">
+          ${churches
+            .map((church) => {
+              const percentages = getMainStatusPercentages(church.items);
+
+              return `
+                <article class="stack-item">
+                  <div class="stack-item-top">
+                    <h4>${escapeHtml(church.igrejaNome)}</h4>
+                    <span class="tiny-muted">${percentages.total} estudos bíblicos</span>
+                  </div>
+
+                  <p class="stack-item-sub">
+                    Visão percentual atual dos principais status nesta igreja.
+                  </p>
+
+                  ${renderStatusSummaryPills(percentages)}
+                </article>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+    `
+    : `
+      <div class="card" style="margin-top:18px;">
+        <div class="card-header">
+          <div>
+            <h3>Panorama da igreja local</h3>
+            <p>Total de estudos bíblicos e percentuais dos principais níveis da sua igreja.</p>
+          </div>
+        </div>
+
+        <article class="stack-item">
+          <div class="stack-item-top">
+            <h4>${escapeHtml(getCurrentUserLocalName() || "Igreja local")}</h4>
+            <span class="tiny-muted">${geral.total} estudos bíblicos</span>
+          </div>
+
+          <p class="stack-item-sub">
+            Visão percentual atual dos principais status da igreja local.
+          </p>
+
+          ${renderStatusSummaryPills(geral)}
+        </article>
+      </div>
+    `;
 
   dashboardScales.innerHTML = `
     <div class="card">
@@ -493,6 +625,30 @@ function renderDashboardScales() {
         </div>
       </div>
     </div>
+
+    <div class="card" style="margin-top:18px;">
+      <div class="card-header">
+        <div>
+          <h3>${districtOrAdminView ? "Panorama geral do distrito" : "Panorama geral da igreja"}</h3>
+          <p>Percentuais atuais dos principais níveis espirituais.</p>
+        </div>
+      </div>
+
+      <article class="stack-item">
+        <div class="stack-item-top">
+          <h4>${districtOrAdminView ? "Distrito Esplanada" : escapeHtml(getCurrentUserLocalName() || "Igreja local")}</h4>
+          <span class="tiny-muted">${geral.total} estudos bíblicos</span>
+        </div>
+
+        <p class="stack-item-sub">
+          Percentuais principais calculados com base nos estudos atualmente registrados.
+        </p>
+
+        ${renderStatusSummaryPills(geral)}
+      </article>
+    </div>
+
+    ${churchCardsHtml}
   `;
 }
 
@@ -1116,10 +1272,13 @@ function renderMetrics() {
     },
     {
   label: "Concluídos",
-  value: data.filter((item) =>
-    item.status === "Concluído" || item.status === "Batismo Realizado"
-  ).length,
+  value: data.filter((item) => item.status === "Concluído").length,
   className: "metric-card soft-green"
+},
+{
+  label: "Batismo realizado",
+  value: data.filter((item) => item.status === "Batismo Realizado").length,
+  className: "metric-card soft-blue"
 },
     {
       label: "Prontos para decisão",
