@@ -1319,16 +1319,16 @@ function renderMetrics() {
   value: data.filter((item) => item.status === "Concluído").length,
   className: "metric-card soft-green"
 },
-{
-  label: "Batismo realizado",
-  value: data.filter((item) => item.status === "Batismo Realizado").length,
-  className: "metric-card soft-blue"
-},
     {
       label: "Prontos para decisão",
       value: data.filter(isDecision).length,
       className: "metric-card soft-blue"
-    }
+    },
+{
+  label: "Batismo realizado",
+  value: data.filter((item) => item.status === "Batismo Realizado").length,
+  className: "metric-card soft-blue"
+}
   ];
 
   metricsGrid.innerHTML = metrics
