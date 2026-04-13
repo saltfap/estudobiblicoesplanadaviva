@@ -611,17 +611,16 @@ a{
 }
 
 .stack-item{
-  padding:16px;
   border:1px solid var(--line);
   border-radius:18px;
-  background:linear-gradient(180deg, #fff, #fbfdff);
+  padding:16px;
+  background:linear-gradient(180deg, #ffffff, #fbfefd);
   transition:var(--transition);
 }
 
 .stack-item:hover{
-  border-color:var(--line-strong);
-  box-shadow:var(--shadow-xs);
-  transform:translateY(-1px);
+  transform:translateY(-2px);
+  box-shadow:0 10px 24px rgba(16,24,40,.08);
 }
 
 .stack-item-top{
@@ -632,16 +631,22 @@ a{
 }
 
 .stack-item-top h4{
-  margin:0;
-  font-size:15px;
-  line-height:1.35;
+  font-size:16px;
+  font-weight:800;
+  letter-spacing:-.02em;
+}
+
+.stack-item-top .tiny-muted{
+  font-size:13px;
+  font-weight:700;
+  color:var(--primary);
 }
 
 .stack-item-sub{
-  margin:7px 0 0;
-  color:var(--text-soft);
   font-size:13px;
-  line-height:1.6;
+  line-height:1.5;
+  color:var(--text-soft);
+  margin:6px 0 10px;
 }
 
 .tiny-muted{
@@ -992,20 +997,17 @@ a{
 ========================================================= */
 .pill-row{
   display:flex;
-  gap:8px;
   flex-wrap:wrap;
-  margin-top:12px;
+  gap:8px;
+  margin-top:8px;
 }
 
 .pill{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-height:30px;
+  font-size:12px;
+  font-weight:700;
   padding:6px 10px;
   border-radius:999px;
-  font-size:12px;
-  font-weight:800;
+  letter-spacing:.02em;
   white-space:nowrap;
 }
 
@@ -1358,6 +1360,21 @@ a{
   font-weight:700;
 }
 
+.dashboard-scales .card{
+  border-radius:22px;
+}
+
+.dashboard-scales .card-header h3{
+  font-size:18px;
+  font-weight:900;
+  letter-spacing:-.02em;
+}
+
+.dashboard-scales .card-header p{
+  font-size:13px;
+  color:var(--text-soft);
+}
+
 /* =========================================================
    RESPONSIVO DO GRÁFICO
 ========================================================= */
@@ -1429,6 +1446,19 @@ a{
   .remove-instrutor-btn{
     width:100%;
   }
+
+.pill-row{
+  gap:6px;
+}
+
+.pill{
+  font-size:11px;
+  padding:5px 8px;
+}
+
+.stack-item{
+  padding:14px;
+}
 
 @media (max-width: 560px){
   .progress-summary-card{
