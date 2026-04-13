@@ -617,7 +617,7 @@ function renderDashboardScales() {
             Visão percentual atual dos principais status da igreja local.
           </p>
 
-          ${renderStatusSummaryPills(geral)}
+          ${renderStatusSummaryChart(geral)}
         </article>
       </div>
     `;
@@ -688,7 +688,7 @@ function renderDashboardScales() {
           Percentuais principais calculados com base nos estudos atualmente registrados.
         </p>
 
-        ${renderStatusSummaryPills(geral)}
+        ${renderStatusSummaryChart(geral)}
       </article>
     </div>
 
